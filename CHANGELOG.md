@@ -1,5 +1,14 @@
 # Changelog — t17
 
+## v0.2.0 — 2026-09-26
+
+- socket: greet a new connection with an empty `messages` envelope, the smallest well-formed thing
+  a server can say — `__ParseJSONBlob` looks for that key. If the transport waits to be greeted
+  before it finalises the connection, this is what unblocks it.
+- socket: after three unanswered pings, send a **close frame**. RFC 6455 requires a live reader to
+  echo a close, so this settles read-versus-not-reading without assuming the SDK answers pings —
+  which it may not, and which the earlier "no pong" reading leaned on too heavily.
+
 ## v0.1.1 — 2026-09-26
 
 - `-jwks-host` / `T17_JWKS_HOST`: nx-baas routes by hostname and answers the BAAS surface only for

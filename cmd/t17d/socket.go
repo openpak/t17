@@ -48,16 +48,46 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 	_ = rw.Flush()
 	log.Printf("[t17] socket: open %s%s from %s", r.Host, r.URL.Path, r.RemoteAddr)
 
-	// Both sides went quiet on the first connection: the client opened the socket and sent
-	// nothing. A ping on idle separates the two explanations — a pong proves its reader is alive
-	// and it is waiting on application data, silence means its websocket layer is not reading.
 	token := r.URL.Query().Get("token")
+
+	// The client opens the socket and sends nothing, so this connection has to earn its keep as
+	// an experiment. Three things happen, in order:
+	//
+	//  1. An empty `messages` envelope, immediately. `__ParseJSONBlob` looks for that key, so this
+	//     is the smallest well-formed thing a server can say. If the transport is waiting to be
+	//     greeted before it will "finalise new connection", this is what unblocks it.
+	//  2. A ping on idle. A pong would prove the reader is alive — but only if this SDK answers
+	//     pings itself, which is not established, so silence alone proves nothing.
+	//  3. After three unanswered pings, a close frame. RFC 6455 requires a reader that is alive to
+	//     echo a close, so "client closed" versus a bare timeout settles read-vs-not-reading
+	//     without depending on ping behaviour at all.
+	if err := writeText(rw, []byte(`{"messages":[]}`)); err != nil {
+		log.Printf("[t17] socket: greeting failed (%v)", err)
+		return true
+	}
+	log.Printf("[t17] socket >>> greeting {\"messages\":[]}")
+
+	idle := 0
 	for {
 		_ = conn.SetReadDeadline(time.Now().Add(20 * time.Second))
 		op, payload, err := readFrame(rw)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				log.Printf("[t17] socket: idle 20s, pinging")
+				idle++
+				if idle > 3 {
+					log.Printf("[t17] socket: %d idle periods, no pong — sending close to test the reader", idle)
+					_, _ = rw.Write([]byte{0x88, 0}) // close, no payload
+					_ = rw.Flush()
+					// A live reader must echo the close; read once more to find out which it is.
+					_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+					if op, _, err := readFrame(rw); err == nil && op == 0x8 {
+						log.Printf("[t17] socket: close echoed — the reader IS alive, it was waiting on us")
+					} else {
+						log.Printf("[t17] socket: no close echo (%v) — the reader is not running", err)
+					}
+					return true
+				}
+				log.Printf("[t17] socket: idle 20s, pinging (%d)", idle)
 				if _, err := rw.Write([]byte{0x89, 0}); err != nil { // ping, no payload
 					log.Printf("[t17] socket: ping failed (%v)", err)
 					return true
@@ -79,6 +109,7 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 		case 0xa:
 			log.Printf("[t17] socket: pong — the client's reader is alive and it is waiting on us")
 		default:
+			idle = 0
 			log.Printf("[t17] socket <<< op=%d len=%d %s", op, len(payload), payload)
 			if reply := reply(payload, token); reply != nil {
 				log.Printf("[t17] socket >>> %s", reply)
