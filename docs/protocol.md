@@ -61,6 +61,14 @@ name, and the split helper (`0x6975a0`) returns **false** when the separator is 
 `PreInitialise` via "Problem splitting the displayNameFull into short!!" — a path with no error
 string of its own. A name without a tag can never work, whatever else is correct.
 
+**The ttl has a hard ceiling of 10800 seconds (3 hours).** `T17BE_Transport::Initialise` checks
+`((authExpirySeconds-1)>>4) < 0x2a3`; over that it logs "Cannot initialise Base Class --> Bailing!!"
+and returns false. The failure is silent from outside and its shape is distinctive: a failed
+`Initialise` leaves the transport's active byte at `+8` clear, and `Update` (`0x691db0`) returns
+immediately while that byte is zero, so the client **holds the websocket open and never sends a
+single request**. A separate reconnection-time check (`((x-1)>>3) < 0x2a3`, ≤ 5400 s) only warns and
+forces the default.
+
 ### The native contract, for reference
 
 `T17BE_Transport::PreInitialise` (`0x68f2c0`) parses the string C# hands it and looks up keys in a

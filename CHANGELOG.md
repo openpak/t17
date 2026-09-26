@@ -1,5 +1,15 @@
 # Changelog — t17
 
+## v0.3.0 — 2026-09-26
+
+- **The auth expiry must be at most 10800 seconds.** `T17BE_Transport::Initialise` checks
+  `((authExpirySeconds-1)>>4) < 0x2a3`, and on failure logs "Cannot initialise Base Class -->
+  Bailing!!" and returns false. A failed Initialise leaves the transport's "active" byte (`+8`)
+  clear, and its `Update` (`0x691db0`) returns immediately while that byte is zero — so the core
+  pumps no requests and the client holds an open websocket without ever sending one. Our `ttl` was
+  12 hours, an arbitrary choice, four times over the limit. Now one hour, which also stays under
+  the reconnection-time check's 5400 s.
+
 ## v0.2.0 — 2026-09-26
 
 - socket: greet a new connection with an empty `messages` envelope, the smallest well-formed thing

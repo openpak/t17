@@ -67,7 +67,15 @@ func (s *server) getToken(w http.ResponseWriter, r *http.Request) {
 		name = fmt.Sprintf("%s#%04d", name, crc32.ChecksumIEEE([]byte(id))%10000)
 	}
 
-	const ttl = 12 * time.Hour
+	// T17BE caps the auth expiry at 10800 seconds. T17BE_Transport::Initialise checks
+	// ((authExpirySeconds-1)>>4) < 0x2a3 and, when it fails, logs "Cannot initialise Base Class
+	// --> Bailing!!" and returns false — after which the transport's "active" byte stays clear and
+	// its Update pumps nothing, so the client holds an open websocket and never sends a request.
+	// A 12-hour ttl (an arbitrary choice of ours) was four times over that limit. One hour also
+	// stays under the reconnection-time check's 5400 s, which is only a warning but no reason to
+	// trip it.
+	const ttl = time.Hour
+	const t17MaxAuthExpirySeconds = 10800
 	log.Printf("[t17] get-token: game=%s player=%s (%s) platform=%s", in.GameID, name, id, in.PlatformID)
 	// Exactly the twelve fields of the managed response class, with the types it declares:
 	// JsonUtility.FromJsonOverwrite ignores unknown keys and defaults missing ones, but THROWS on
@@ -78,7 +86,7 @@ func (s *server) getToken(w http.ResponseWriter, r *http.Request) {
 		"websocketUrl":     "wss://game." + s.self + "/socket",
 		"token":            s.mintToken(id),
 		"exp":              time.Now().Add(ttl).Unix(),
-		"ttl":              int(ttl.Seconds()),
+		"ttl":              min(int(ttl.Seconds()), t17MaxAuthExpirySeconds),
 		"displayName":      name,
 		"globalPlayerId":   id,
 		"role":             "client",

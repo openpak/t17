@@ -13,6 +13,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func signed(t *testing.T, key *rsa.PrivateKey, kid string, claims map[string]any) string {
@@ -132,5 +133,35 @@ func TestGetTokenRefusesWhatItCannotVerify(t *testing.T) {
 			signed(t, good, "openpak-baas-key-1", map[string]any{"sub": "x"})))))
 	if w.Code != 401 {
 		t.Errorf("no jwks url: got HTTP %d, want 401", w.Code)
+	}
+}
+
+// T17BE_Transport::Initialise bails with "Cannot initialise Base Class" when the auth expiry
+// exceeds 10800 s, and a bailed Initialise leaves the transport inert: it holds the websocket open
+// and pumps nothing. The reply must never carry a larger ttl.
+func TestTTLStaysUnderTheSDKLimit(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+	js := jwksServer(t, key, "k")
+	defer js.Close()
+	s := &server{self: "t17service.com", keys: newKeyCache(js.URL, "")}
+	tok := signed(t, key, "k", map[string]any{"sub": "aaaaaaaaaaaa0001"})
+	w := httptest.NewRecorder()
+	s.getToken(w, httptest.NewRequest("POST", "/prod/auth/get-token",
+		strings.NewReader(fmt.Sprintf(`{"nintendoSwitchAccessToken":%q}`, tok))))
+	var got map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatal(err)
+	}
+	ttl, _ := got["ttl"].(float64)
+	if ttl <= 0 || ttl > 10800 {
+		t.Errorf("ttl %v is outside the SDK's 1..10800 s window", ttl)
+	}
+	// exp is an absolute unix time and must agree with the ttl rather than drifting from it.
+	exp, _ := got["exp"].(float64)
+	if d := exp - float64(time.Now().Unix()); d < ttl-60 || d > ttl+60 {
+		t.Errorf("exp is %.0f s away but ttl says %.0f", d, ttl)
 	}
 }
