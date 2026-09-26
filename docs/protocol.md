@@ -118,11 +118,31 @@ Re-auth replaces the `token`.
 
 ## Open
 
-The socket opens and then **neither side speaks**: the client sends no frame and does not close.
-The boot sequence it should run is `Get Block List → Go Online → Get Essentials → READY`
-(`T17BE_System::__BootUp`). `OnNewWebsocketCreated` only acts when the transport state is 3, which
-is the reconnect path, so the first-connect trigger is still unidentified. This service pings an
-idle socket to tell "its reader is alive and waiting on us" apart from "its reader is dead".
+The socket opens and then **the client never reads it.** Measured 2026-09-26 against the real
+console: the socket opened at 04:46:02, this service pinged at 04:46:22 and again at 04:46:42, both
+writes succeeded, and the client neither ponged nor closed. RFC 6455 requires a pong, and
+`NintendoSDK_WebSocket` is conformant, so its receive path was never started.
+
+**That means implementing the routes is premature.** Answers would go unread. The gap is in the
+client's transport initialisation, not in the protocol above the socket.
+
+Where to look next. The boot sequence that should run is
+`Get Block List → Go Online → Get Essentials → READY` (`T17BE_System::__BootUp`, strings at
+`0x68f038`+). `OnNewWebsocketCreated` (`0x6932b0`) only acts when the transport state — the word at
+`+0x94` — is **3**, setting it to 4 on success and 6 on failure; that is the *reconnect* path
+("recreate on AppSide"), so the first-connect path differs and its trigger is unidentified. The C#
+side reaches its own "connected" state 2 (`NintendoSwitch::MoveNext`, `0x4c065d0`) after
+`ConnectAsync` returns and a virtual check passes — it does not dispose the socket, so it believes
+the connection is up. Something between that and native's read loop does not fire.
+
+Worth checking first: whether native ever registers its receive callback
+(`BE_Transport_WebSocket_OnReceive`, `Core::BE_Transport_WebSocket_RegisterSendViaWebsocketCallback`
+and the `RegisterCB_*` family), and whether `T17BE_Transport::Initialise` — which bails with
+"Missing Auth Token" and warns on "Bad Reconnection Time" — completed at all. Its init parameters
+are logged one per line by the SDK (`Initialise PARAM --> authToken/globalID/deviceID/
+displayNameFull --> %s`), which is the shape of an SDK that expects an operator to have a log sink;
+`pLogFilename` is one of those parameters, and nothing appears under Ryujinx's save data, so the
+game passes no filename.
 
 Also unverified: whether `/live/get` carries the Photon **Fusion AppId**. No AppId is baked into
 the build — `PhotonAppSettings` holds none and the C# has `CustomPhotonAppSettings` — so if it
