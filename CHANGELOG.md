@@ -1,5 +1,26 @@
 # Changelog — t17
 
+## v0.7.0 — 2026-09-26
+
+The client now runs the whole online flow — go-online, friend invites, session invites, storage,
+friends, platform accounts — and stops at `/sessions/create`. Three shapes were wrong, all three
+read out of the handlers:
+
+- **A session's id key is `id`, not `sessionId`.** `InternalResponse_SessionsCreate` (`0x685740`)
+  reads `session` → `players` → `id` → `closedToNewPlayers` → `membersCanInviteOthers` → `type` →
+  `owner` → `maxPlayers` → `supportedPlatforms`, and a missing `id` is its "Bad SessionID!" path.
+  Both keys are sent now, since the invite structures use `sessionId`. The type must be `game` or
+  `group` — anything else is "Unknown SessionType".
+- **`players` entries are full players.** The parser (`0x696370`) wants `globalPlayerId`,
+  `displayName`, `platformId`, `platformPlayerId`, `deviceId`, `gameId`, `connected`, `chunk`,
+  `linkedAccounts`; one it cannot parse fails the entire session response.
+- **`invites` is an object of `incoming` and `outgoing`**, not an array
+  (`InternalResponse_GetFriendInvites`, `0x66c1d0`).
+- **`/player/get-platform-accounts` now resolves ids** instead of answering an empty list. This is
+  how the game turns the console's friend list into T17BE players, so an empty answer leaves every
+  friend unresolvable and uninvitable. A Switch player's `globalPlayerId` is their NSA id — ours is,
+  from get-token — so the mapping is the identity one.
+
 ## v0.6.0 — 2026-09-26
 
 **A socket reply must not be wrapped in `messages`.** The websocket receive path (`f_6933f0`, the

@@ -33,22 +33,31 @@ func (c *client) displayName() string {
 	return id + "#" + fourDigits(id)
 }
 
-// session answers /sessions/create, /update and /accept-invite. InternalResponse_SessionsCreate
-// checks four things by name and logs a distinct line for each: an empty session type, a bad
-// maxPlayers, a bad sessionId and a bad sessionOwner. The rest is echoed from the request so the
-// client sees the session it asked for.
+// session answers /sessions/create, /update and /accept-invite.
+// InternalResponse_SessionsCreate (0x685740) reads the keys in this order -- `session`, `players`,
+// **`id`**, `closedToNewPlayers`, `membersCanInviteOthers`, `type`, `owner`, `maxPlayers`,
+// `supportedPlatforms` -- and refuses with a named log line for each of: an empty session type, an
+// unknown type (only `game` and `group` exist), a bad `maxPlayers`, a bad `id` ("Bad SessionID!"),
+// a bad `owner` ("Bad sessionOwner!") and a player it cannot parse.
 //
-// ponytail: the id is derived from the owner, so a player rejoining gets the same session and no
-// state is kept. Real session tracking is the next piece of work, and it needs two consoles to test.
+// The id key is `id`, not `sessionId`: sending only `sessionId` is the "Bad SessionID" failure.
+// `sessionId` is what the *invite* structures use, so both are sent here and the client reads
+// whichever it looks for.
+//
+// ponytail: the id is derived from the owner, so nothing is stored and a player rejoining lands in
+// the same session. Real session tracking is the next piece of work and it needs two consoles.
 func (c *client) session(in map[string]any) map[string]any {
 	owner := c.playerID()
-	sid, _ := in["sessionId"].(string)
-	if sid == "" {
-		sid = "s-" + owner
+	id, _ := in["sessionId"].(string)
+	if id == "" {
+		id, _ = in["id"].(string)
+	}
+	if id == "" {
+		id = "s-" + owner
 	}
 	kind, _ := in["type"].(string)
-	if kind == "" {
-		kind = "private"
+	if kind != "game" && kind != "group" {
+		kind = "group" // the only two the client accepts; anything else is "Unknown SessionType"
 	}
 	maxPlayers, ok := in["maxPlayers"].(float64)
 	if !ok || maxPlayers < 1 {
@@ -60,19 +69,40 @@ func (c *client) session(in map[string]any) map[string]any {
 	}
 	platforms, hasPlatforms := in["supportedPlatforms"]
 	if !hasPlatforms {
-		platforms = []any{"nintendo"}
+		platforms = []any{"all"}
 	}
 
 	return map[string]any{
-		"sessionId":              sid,
+		"id":                     id,
+		"sessionId":              id,
 		"type":                   kind,
 		"owner":                  owner,
 		"maxPlayers":             int(maxPlayers),
-		"players":                []any{map[string]any{"globalPlayerId": owner, "displayName": c.displayName()}},
+		"players":                []any{c.player()},
 		"membersCanInviteOthers": in["membersCanInviteOthers"],
 		"closedToNewPlayers":     in["closedToNewPlayers"],
 		"chunk":                  chunk,
 		"supportedPlatforms":     platforms,
+	}
+}
+
+// player is one entry of a session's `players`. The parser (0x696370) reads globalPlayerId,
+// displayName, platformId, platformPlayerId, deviceId, gameId, connected, chunk, liveData and
+// linkedAccounts; a player it cannot parse fails the whole session response. Our globalPlayerId is
+// the console's own NSA id, so platformPlayerId is the same value.
+func (c *client) player() map[string]any {
+	id := c.playerID()
+
+	return map[string]any{
+		"globalPlayerId":   id,
+		"platformPlayerId": id,
+		"displayName":      c.displayName(),
+		"platformId":       "nintendo",
+		"deviceId":         "nintendo-switch",
+		"gameId":           "ProjectJourney",
+		"connected":        true,
+		"chunk":            "{}",
+		"linkedAccounts":   []any{},
 	}
 }
 

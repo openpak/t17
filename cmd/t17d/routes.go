@@ -32,8 +32,23 @@ var routes = map[string]route{
 		name, _ := in["newDisplayName"].(string)
 		return map[string]any{"newDisplayName": name}
 	}},
+	// InternalResponse_BatchGetPlayerGlobalIDList reads `accounts`, each entry a globalPlayerId and
+	// platformPlayerId. This is how the game turns the console's friend list into T17BE players, so
+	// answering with an empty list leaves every friend unresolvable and uninvitable. A Switch
+	// player's globalPlayerId *is* their NSA id -- ours is, from get-token -- so the mapping is
+	// the identity one.
 	"/player/get-platform-accounts": {func(in map[string]any, c *client) map[string]any {
-		return map[string]any{"accounts": []any{}}
+		ids, _ := in["platformPlayerIds"].([]any)
+		accounts := make([]any, 0, len(ids))
+		for _, id := range ids {
+			s, ok := id.(string)
+			if !ok || s == "" {
+				continue
+			}
+			accounts = append(accounts, map[string]any{"globalPlayerId": s, "platformPlayerId": s})
+		}
+
+		return map[string]any{"accounts": accounts}
 	}},
 
 	// InternalResponse_GetFriendsAndStatus and InternalResponse_GetBlockedPlayers both log
@@ -44,10 +59,11 @@ var routes = map[string]route{
 	"/friends/get-blocked-players": {func(map[string]any, *client) map[string]any {
 		return map[string]any{"blockList": []any{}}
 	}},
-	// Each invite carries globalPlayerId and displayName, and the handler rejects a display name
-	// that is not a full name ("Incoming --> Bad Full Name"). Empty lists avoid the question.
+	// InternalResponse_GetFriendInvites reads `invites` as an OBJECT holding `incoming` and
+	// `outgoing` arrays, each entry a globalPlayerId and displayName. It rejects a display name that
+	// is not a full name, per direction ("Incoming --> Bad Full Name"); empty lists avoid that.
 	"/friends/get-friend-invites": {func(map[string]any, *client) map[string]any {
-		return map[string]any{"invites": []any{}}
+		return map[string]any{"invites": map[string]any{"incoming": []any{}, "outgoing": []any{}}}
 	}},
 	"/friends/subscribe-to-friend-status-updates": {func(map[string]any, *client) map[string]any {
 		return map[string]any{"blockList": []any{}}

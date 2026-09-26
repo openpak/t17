@@ -187,8 +187,21 @@ func TestRoutesAnswerWhatTheHandlersRequire(t *testing.T) {
 	if !ok {
 		t.Fatal("sessions/create must carry a session object")
 	}
-	if sess["type"] == "" || sess["sessionId"] == "" || sess["owner"] == "" {
-		t.Errorf("sessions/create left a required field empty: %#v", sess)
+	// The id key is `id`; sending only `sessionId` is the client's "Bad SessionID!" failure.
+	if sess["id"] == "" || sess["id"] == nil {
+		t.Errorf("sessions/create session has no id: %#v", sess)
+	}
+	if sess["type"] != "group" && sess["type"] != "game" {
+		t.Errorf("session type = %v, only game and group exist", sess["type"])
+	}
+	if sess["owner"] == "" || sess["owner"] == nil {
+		t.Errorf("sessions/create has no owner: %#v", sess)
+	}
+	players, _ := sess["players"].([]any)
+	if len(players) == 0 {
+		t.Error("sessions/create must list at least the owner as a player")
+	} else if p, _ := players[0].(map[string]any); p["globalPlayerId"] == nil || p["displayName"] == nil {
+		t.Errorf("player entry is missing fields the parser needs: %#v", players[0])
 	}
 	if n, _ := sess["maxPlayers"].(float64); n < 1 {
 		t.Errorf("sessions/create maxPlayers = %v, must be at least 1", sess["maxPlayers"])
@@ -209,5 +222,43 @@ func TestSocketReplyIsNotWrappedInMessages(t *testing.T) {
 	}
 	if root["action"] != "response" {
 		t.Errorf(`root action = %v, want "response": %s`, root["action"], out)
+	}
+}
+
+// get-friend-invites carries `invites` as an object of incoming/outgoing arrays, and
+// get-platform-accounts must resolve each requested platform id -- an empty list leaves every
+// console friend unresolvable, which is what blocked inviting one.
+func TestInvitesAndAccountResolution(t *testing.T) {
+	s := &server{}
+	call := func(action, reqBody string) map[string]any {
+		out := s.reply([]byte(`{"action":"`+action+`","headers":{"request-id":1},"body":`+reqBody+`}`), "t17-p1-x")
+		var env struct {
+			Body map[string]any `json:"body"`
+		}
+		if err := json.Unmarshal(out, &env); err != nil {
+			t.Fatalf("%s: %v", action, err)
+		}
+		return env.Body
+	}
+
+	inv, ok := call("/friends/get-friend-invites", `{}`)["invites"].(map[string]any)
+	if !ok {
+		t.Fatal("invites must be an object holding incoming and outgoing")
+	}
+	if _, ok := inv["incoming"]; !ok {
+		t.Error("invites is missing incoming")
+	}
+	if _, ok := inv["outgoing"]; !ok {
+		t.Error("invites is missing outgoing")
+	}
+
+	accounts, _ := call("/player/get-platform-accounts",
+		`{"platformId":"nintendo","platformPlayerIds":["aaa","bbb"]}`)["accounts"].([]any)
+	if len(accounts) != 2 {
+		t.Fatalf("got %d accounts for 2 platform ids: %#v", len(accounts), accounts)
+	}
+	first, _ := accounts[0].(map[string]any)
+	if first["platformPlayerId"] != "aaa" || first["globalPlayerId"] != "aaa" {
+		t.Errorf("account mapping wrong: %#v", first)
 	}
 }

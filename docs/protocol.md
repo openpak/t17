@@ -277,7 +277,7 @@ Request fields are the keys the builder writes; response fields are the keys the
 | `/friends/send-friend-invite` | — | — | `globalPlayerId`, `displayName` |
 | `/friends/withdraw-friend-invite` | `FriendSystem::InternalRequest_WithdrawInvite` `0x66f190` | `inviteeGlobalPlayerId` | — |
 | `/friends/{accept,reject}-friend-invite`, `/friends/remove-friend`, `/friends/unsubscribe-to-friend-status-updates` | — | — | status only |
-| `/sessions/create` | `SessionSystem::InternalRequest_SessionsCreate` `0x68aa10` | `game`, `group`, `type`, `chunk`, `maxPlayers`, `membersCanInviteOthers`, `closedToNewPlayers`, `supportedPlatforms` | `session` with `players`, `owner`, `maxPlayers`, `membersCanInviteOthers`, `closedToNewPlayers`, `chunk`, `game`, `group`, `supportedPlatforms` |
+| `/sessions/create` | `SessionSystem::InternalRequest_SessionsCreate` `0x68aa10` | `type` (`game` or `group`), `chunk`, `maxPlayers`, `membersCanInviteOthers`, `closedToNewPlayers`, `supportedPlatforms` | `session` with **`id`** (not `sessionId`), `type`, `owner`, `maxPlayers`, `players[]`, `closedToNewPlayers`, `membersCanInviteOthers`, `supportedPlatforms` |
 | `/sessions/update` | `…SessionsUpdate` `0x6897d0` | `sessionId` + the create fields | as create |
 | `/sessions/accept-invite` | `…SessionsAcceptInvite` `0x68a270` | `sessionId`, `inviterId` | `session` details (required) |
 | `/sessions/list-invites` | `…SessionsListInvites` `0x68a110` | — | `invites[]` of `sessionId`, `inviter`, `invitee`, `supportedPlatforms` |
@@ -315,3 +315,19 @@ counterpart: `messageProtocolVersion`, `messageSystemId`, `messageType`, `messag
 `Core::Update` (`0x690fc0`) returns immediately unless `core+0` is set, and
 `Transport::Update` (`0x691db0`) needs both its active byte at `+8` **and** a websocket pointer at
 `+0x10` — which `Initialise` takes as an argument and stores via `0x68ecc0`.
+
+### Two shapes that are easy to get wrong
+
+**A session's id is `id`.** `InternalResponse_SessionsCreate` (`0x685740`) reads its keys in the
+order `session`, `players`, `id`, `closedToNewPlayers`, `membersCanInviteOthers`, `type`, `owner`,
+`maxPlayers`, `supportedPlatforms`, and each refusal names itself: "Empty SessionType!",
+"Unknown SessionType [%s]!" (only `game` and `group`), "Bad maxPlayers[%d]!", "Bad SessionID!",
+"Bad sessionOwner!", "Problem Parsing Player JSON for Session[%s]". `sessionId` is the key the
+*invite* structures use.
+
+**A player is parsed by `0x696370`** from `globalPlayerId`, `displayName`, `platformId`,
+`platformPlayerId`, `deviceId`, `gameId`, `connected`, `chunk`, `liveData`, `linkedAccounts`.
+
+**`invites` is an object**, `{incoming: [], outgoing: []}` (`0x66c1d0`), while
+`/player/get-platform-accounts` answers `accounts[]` of `{globalPlayerId, platformPlayerId}`
+(`0x67c730`) — the bridge from the console's friend list to T17BE players.
