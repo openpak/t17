@@ -50,7 +50,7 @@ func TestGetTokenAnswersTheManagedClass(t *testing.T) {
 	}
 	js := jwksServer(t, key, "openpak-baas-key-1")
 	defer js.Close()
-	s := &server{self: "t17service.com", keys: newKeyCache(js.URL)}
+	s := &server{self: "t17service.com", keys: newKeyCache(js.URL, "")}
 
 	tok := signed(t, key, "openpak-baas-key-1", map[string]any{"sub": "aaaaaaaaaaaa0001"})
 	body := fmt.Sprintf(`{"platformId":"nintendo","deviceId":"nintendo-switch","gameId":"ProjectJourney",
@@ -116,7 +116,7 @@ func TestGetTokenRefusesWhatItCannotVerify(t *testing.T) {
 		"expired":     signed(t, good, "openpak-baas-key-1", map[string]any{"sub": "x", "exp": 1}),
 		"no subject":  signed(t, good, "openpak-baas-key-1", map[string]any{}),
 	} {
-		s := &server{self: "t17service.com", keys: newKeyCache(js.URL)}
+		s := &server{self: "t17service.com", keys: newKeyCache(js.URL, "")}
 		w := httptest.NewRecorder()
 		s.getToken(w, httptest.NewRequest("POST", "/prod/auth/get-token",
 			strings.NewReader(fmt.Sprintf(`{"nintendoSwitchAccessToken":%q}`, tok))))
@@ -125,7 +125,7 @@ func TestGetTokenRefusesWhatItCannotVerify(t *testing.T) {
 		}
 	}
 	// With no JWKS configured there is no way to know who the caller is; refuse.
-	s := &server{self: "t17service.com", keys: newKeyCache("")}
+	s := &server{self: "t17service.com", keys: newKeyCache("", "")}
 	w := httptest.NewRecorder()
 	s.getToken(w, httptest.NewRequest("POST", "/prod/auth/get-token",
 		strings.NewReader(fmt.Sprintf(`{"nintendoSwitchAccessToken":%q}`,

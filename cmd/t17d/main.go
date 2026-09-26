@@ -30,6 +30,8 @@ var (
 		"the domain handed back in the directory, so the game returns to us")
 	jwksURL = flag.String("jwks-url", os.Getenv("T17_JWKS_URL"),
 		"where to fetch the BAAS public keys that sign a console's id_token")
+	jwksHost = flag.String("jwks-host", os.Getenv("T17_JWKS_HOST"),
+		"Host header for -jwks-url; nx-baas serves the BAAS surface only for its own names")
 )
 
 func envOr(k, def string) string {
@@ -41,7 +43,7 @@ func envOr(k, def string) string {
 
 func main() {
 	flag.Parse()
-	s := &server{self: *selfHost, keys: newKeyCache(*jwksURL)}
+	s := &server{self: *selfHost, keys: newKeyCache(*jwksURL, *jwksHost)}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.route)

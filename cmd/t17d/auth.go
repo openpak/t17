@@ -99,12 +99,16 @@ func (s *server) mintToken(id string) string {
 // nx-baas, so verifying it is a JWKS lookup and an RSA check — no call back to the account service.
 type keyCache struct {
 	url string
-	mu  sync.Mutex
-	at  time.Time
-	key map[string]*rsa.PublicKey
+	// host overrides the Host header. nx-baas routes by hostname and answers the BAAS surface
+	// only for its own names, so a request to the container address needs the BAAS name on it or
+	// it lands in the catch-all 404.
+	host string
+	mu   sync.Mutex
+	at   time.Time
+	key  map[string]*rsa.PublicKey
 }
 
-func newKeyCache(url string) *keyCache { return &keyCache{url: url} }
+func newKeyCache(url, host string) *keyCache { return &keyCache{url: url, host: host} }
 
 func (k *keyCache) verify(token string) (map[string]any, error) {
 	parts := strings.Split(token, ".")
@@ -158,7 +162,7 @@ func (k *keyCache) lookup(kid string) (*rsa.PublicKey, error) {
 	if k.url == "" {
 		return nil, fmt.Errorf("no -jwks-url configured, cannot verify a console token")
 	}
-	keys, err := fetchJWKS(k.url)
+	keys, err := fetchJWKS(k.url, k.host)
 	if err != nil {
 		return nil, err
 	}
@@ -170,9 +174,15 @@ func (k *keyCache) lookup(kid string) (*rsa.PublicKey, error) {
 	return p, nil
 }
 
-func fetchJWKS(url string) (map[string]*rsa.PublicKey, error) {
-	c := &http.Client{Timeout: 5 * time.Second}
-	res, err := c.Get(url)
+func fetchJWKS(url, host string) (map[string]*rsa.PublicKey, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	if host != "" {
+		req.Host = host
+	}
+	res, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
 	if err != nil {
 		return nil, err
 	}

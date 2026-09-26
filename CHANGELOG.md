@@ -1,5 +1,11 @@
 # Changelog — t17
 
+## v0.1.1 — 2026-09-26
+
+- `-jwks-host` / `T17_JWKS_HOST`: nx-baas routes by hostname and answers the BAAS surface only for
+  its own names, so fetching the keys from the container address needs the BAAS name on the Host
+  header or the request lands in its catch-all 404.
+
 ## v0.1.0 — 2026-09-26
 
 - First release. Serves the three T17BE tiers from one process, dispatching on hostname:
