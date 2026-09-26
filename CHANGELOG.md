@@ -1,5 +1,14 @@
 # Changelog — t17
 
+## v0.3.1 — 2026-09-26
+
+- Log the client's upgrade request (`Sec-WebSocket-Version`/`-Protocol`/`-Extensions`), which we
+  had never read back, and **echo the first offered subprotocol**. RFC 6455 §4.1 lets a client
+  that offered subprotocols and got none back treat the connection as failed — while leaving it
+  open, which is indistinguishable from our symptom.
+- The ttl cap in v0.3.0 was **not** the blocker: with `ttl` 3600 the 2026-09-26 05:11 UTC run
+  behaved identically. Recorded so it is not re-tried.
+
 ## v0.3.0 — 2026-09-26
 
 - **The auth expiry must be at most 10800 seconds.** `T17BE_Transport::Initialise` checks

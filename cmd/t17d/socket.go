@@ -42,9 +42,27 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 	}
 	defer conn.Close()
 
+	// The client's own request has never been read back, and it is the one part of this exchange
+	// we can see without instrumenting the console. Log it verbatim.
+	for _, h := range []string{"Sec-WebSocket-Version", "Sec-WebSocket-Protocol", "Sec-WebSocket-Extensions", "User-Agent", "Origin"} {
+		if v := r.Header.Get(h); v != "" {
+			log.Printf("[t17] socket: req %s: %s", h, v)
+		}
+	}
+
 	sum := sha1.Sum([]byte(key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11")) // RFC 6455 §4.2.2
-	_, _ = rw.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
-		"Sec-WebSocket-Accept: " + base64.StdEncoding.EncodeToString(sum[:]) + "\r\n\r\n")
+	resp := "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+		"Sec-WebSocket-Accept: " + base64.StdEncoding.EncodeToString(sum[:]) + "\r\n"
+	// RFC 6455 §4.1: a client that offered subprotocols and is answered without one has no
+	// agreed protocol, and is entitled to treat the connection as failed — which from outside
+	// looks exactly like our symptom, an open socket that never speaks. Echo the first offer.
+	// Extensions are left unacknowledged on purpose: we cannot deflate.
+	if p := r.Header.Get("Sec-WebSocket-Protocol"); p != "" {
+		first := strings.TrimSpace(strings.Split(p, ",")[0])
+		resp += "Sec-WebSocket-Protocol: " + first + "\r\n"
+		log.Printf("[t17] socket: echoing subprotocol %q", first)
+	}
+	_, _ = rw.WriteString(resp + "\r\n")
 	_ = rw.Flush()
 	log.Printf("[t17] socket: open %s%s from %s", r.Host, r.URL.Path, r.RemoteAddr)
 
