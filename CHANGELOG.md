@@ -1,5 +1,25 @@
 # Changelog — t17
 
+## v0.4.0 — 2026-09-26
+
+The reply shape is now read out of the client's own parsers instead of inferred, and it was wrong
+in three ways at once — each enough on its own for every answer to be silently discarded:
+
+- **`action` must be the literal `"response"`.** `__ParseJSONObject` (`0x693af0`) switches on it and
+  accepts only `response`, `message` or `multipart`; we echoed the request's path, which logs
+  "Unknown Action Type --> Ignoring".
+- **`statusCode` belongs at the element root**, as a number, not inside `headers`.
+- **`request-id` must stay a JSON number** inside `headers`. It is read with an integer getter, and
+  decoding the incoming headers into `map[string]string` also meant a numeric request-id failed to
+  decode and the entire frame was ignored.
+
+Also removed two experiments that would break a session that works: the unprompted
+`{"messages":[]}` greeting (an empty array reaches the branch that marks a pending request
+complete) and the close frame after three unanswered pings. The idle ping stays.
+
+None of this was why the socket sat silent — that was Ryujinx answering `nn::ssl` `Pending` with a
+hardcoded zero, so the client never read anything we sent. See `docs/protocol.md`.
+
 ## v0.3.1 — 2026-09-26
 
 - Log the client's upgrade request (`Sec-WebSocket-Version`/`-Protocol`/`-Extensions`), which we

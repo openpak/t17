@@ -68,22 +68,9 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 
 	token := r.URL.Query().Get("token")
 
-	// The client opens the socket and sends nothing, so this connection has to earn its keep as
-	// an experiment. Three things happen, in order:
-	//
-	//  1. An empty `messages` envelope, immediately. `__ParseJSONBlob` looks for that key, so this
-	//     is the smallest well-formed thing a server can say. If the transport is waiting to be
-	//     greeted before it will "finalise new connection", this is what unblocks it.
-	//  2. A ping on idle. A pong would prove the reader is alive — but only if this SDK answers
-	//     pings itself, which is not established, so silence alone proves nothing.
-	//  3. After three unanswered pings, a close frame. RFC 6455 requires a reader that is alive to
-	//     echo a close, so "client closed" versus a bare timeout settles read-vs-not-reading
-	//     without depending on ping behaviour at all.
-	if err := writeText(rw, []byte(`{"messages":[]}`)); err != nil {
-		log.Printf("[t17] socket: greeting failed (%v)", err)
-		return true
-	}
-	log.Printf("[t17] socket >>> greeting {\"messages\":[]}")
+	// Nothing is sent unprompted. An empty `messages` array reaches the branch in
+	// __ParseJSONBlob that marks a pending request complete, so a "greeting" is not harmless, and
+	// the real contract is known now (docs/protocol.md) rather than something to probe for.
 
 	idle := 0
 	for {
@@ -92,19 +79,10 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
 				idle++
-				if idle > 3 {
-					log.Printf("[t17] socket: %d idle periods, no pong — sending close to test the reader", idle)
-					_, _ = rw.Write([]byte{0x88, 0}) // close, no payload
-					_ = rw.Flush()
-					// A live reader must echo the close; read once more to find out which it is.
-					_ = conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-					if op, _, err := readFrame(rw); err == nil && op == 0x8 {
-						log.Printf("[t17] socket: close echoed — the reader IS alive, it was waiting on us")
-					} else {
-						log.Printf("[t17] socket: no close echo (%v) — the reader is not running", err)
-					}
-					return true
-				}
+				// ponytail: a keepalive ping and nothing more. The close-frame experiment that used
+				// to live here existed to find out whether the client was reading at all; it is
+				// not, and the reason was the emulator answering nn::ssl Pending with a hardcoded
+				// zero. A server that hangs up on an idle client would break the working case.
 				log.Printf("[t17] socket: idle 20s, pinging (%d)", idle)
 				if _, err := rw.Write([]byte{0x89, 0}); err != nil { // ping, no payload
 					log.Printf("[t17] socket: ping failed (%v)", err)
@@ -140,33 +118,44 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 	}
 }
 
-// A T17BE request is {"action":…,"headers":{"request-id":…,"Authorization":…},"body":{…}} and the
-// reply goes back inside a `messages` array — `__ParseJSONBlob` looks for that key, and
-// `__ParseJSONObject` refuses any response without a `headers` object. `statusCode` is what
-// InternalResponse_GoOnline and friends check before proceeding.
+// A T17BE request is {"action":"<path>","headers":{"request-id":N,…},"body":{…}} and the reply
+// goes back inside a `messages` array. The shape below is read off the client's own parsers rather
+// than guessed (see docs/protocol.md):
+//
+//	__ParseJSONBlob   (0x6930f0) wants the root key `messages`, an array. Each element goes to
+//	__ParseJSONObject (0x693af0) which switches on the element's `action` — and it accepts exactly
+//	                  three literals, "response", "message" and "multipart". Anything else, the
+//	                  request path included, logs "Unknown Action Type" and is dropped.
+//	the response path (0x693cf0) then requires `headers` holding `request-id` as a NUMBER, and
+//	                  `statusCode` as a NUMBER at the element root, not inside headers. `body` is
+//	                  optional; absent, the client zeroes it. 200 is the success path — 400 maps to
+//	                  its error 8, 403 to 7, 404 to 5, and >=500 or 429 fails the request outright.
 func reply(frame []byte, token string) []byte {
 	var in struct {
-		Action  string            `json:"action"`
-		Headers map[string]string `json:"headers"`
+		Action  string                     `json:"action"`
+		Headers map[string]json.RawMessage `json:"headers"`
 	}
 	if err := json.Unmarshal(frame, &in); err != nil || in.Action == "" {
 		return nil
 	}
-	headers := map[string]any{
-		"request-id": in.Headers["request-id"],
-		"action":     in.Action,
+
+	headers := map[string]any{}
+	// Echoed verbatim so its JSON type survives: the client reads request-id as an int, and
+	// re-encoding it as a string would make its own parser drop the reply.
+	if id, ok := in.Headers["request-id"]; ok {
+		headers["request-id"] = id
+	} else {
+		log.Printf("[t17] socket: request %q carries no request-id — the client will ignore any reply", in.Action)
+	}
+
+	msg := map[string]any{
+		"action":     "response",
+		"headers":    headers,
 		"statusCode": 200,
+		"body":       map[string]any{},
 	}
-	body := map[string]any{}
-	switch in.Action {
-	case "/websocket/go-online":
-		// Nothing of ours to report yet; the status code is what it gates on.
-	case "/websocket/ping":
-		// Same — an empty body with a 200 is a healthy pong at the application level.
-	}
-	out, _ := json.Marshal(map[string]any{
-		"messages": []any{map[string]any{"headers": headers, "body": body}},
-	})
+	out, _ := json.Marshal(map[string]any{"messages": []any{msg}})
+
 	return out
 }
 

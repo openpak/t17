@@ -155,3 +155,51 @@ game passes no filename.
 Also unverified: whether `/live/get` carries the Photon **Fusion AppId**. No AppId is baked into
 the build — `PhotonAppSettings` holds none and the C# has `CustomPhotonAppSettings` — so if it
 arrives from this backend, OpenPak chooses it and `servers/photon` can accept whatever we hand out.
+
+## The websocket message contract (read out of the client's parsers, 2026-09-26)
+
+Every address below is a module vaddr in Moving Out 2 1.3.315's `main`. This replaces everything
+this document previously inferred about the reply shape; the earlier version was wrong in three
+separate ways and each one alone was enough for the client to silently discard our answers.
+
+A frame from us must be an object with a `messages` array (`__ParseJSONBlob`, `0x6930f0`). Each
+element is dispatched by `__ParseJSONObject` (`0x693af0`), which reads the element's **`action`** and
+accepts **exactly three literals**:
+
+| `action` | handled by | meaning |
+|---|---|---|
+| `response` | `0x693cf0` | the answer to a request the client sent |
+| `message` | `0x694180` | a server push |
+| `multipart` | — | a chunked payload |
+
+Anything else — including the request's own path, which is what we used to echo — logs
+`T17BE_Transport :: __ParseJSON --> Unknown Action Type --> [%s] --> Ignoring` and is dropped.
+
+For `action: "response"` (`0x693cf0`):
+
+- `headers` — an object, and it must hold **`request-id` as a JSON number**. Read with the integer
+  getter; a string is a miss and the whole element is discarded. This is how the reply is matched to
+  the pending request, so a dropped one is indistinguishable from no answer at all.
+- `statusCode` — a JSON number, **at the element root, not inside `headers`**.
+- `body` — optional. Absent, the client zeroes its own body struct.
+
+The status is then interpreted: `200` is the success path, `400` becomes its internal error 8, `403`
+becomes 7, `404` becomes 5, and **`>= 500` or `429` fails the request outright**. A separate
+`statusCode != 200` check in `__ParseJSONBlob` marks the whole blob's request failed.
+
+For `action: "message"` (`0x694180`) the element carries `messageSystemId`, `messageType`,
+`messageProtocolVersion`, `from` and `body` (or `message`); a missing body logs
+`No Body - REQUIRED FOR MESSAGES!!!` and a `from` on the block list is ignored.
+
+**Do not send anything unprompted.** An empty `messages` array reaches the branch that marks a
+pending request complete.
+
+## Why the socket used to sit in silence — it was not the protocol
+
+The client wrote its upgrade request and then never read a byte: `ss -tnp` showed the `Recv-Q` on the
+console's side stuck at 264 bytes for ten minutes. The cause was in **our emulator**, not this
+server and not the game: Ryujinx's `SslManagedSocketConnection.Pending()` returned a hardcoded `0`,
+and `nn::ssl::Connection::Pending` is how this client asks whether there is anything to read. It was
+told "nothing", forever, and so never called `Read`. Fixed in the Ryujinx fork by answering with the
+socket's real available count. The ttl ceiling, the `blockList` type, the subprotocol echo and the
+greeting were all changes aimed at a server that was never being read.

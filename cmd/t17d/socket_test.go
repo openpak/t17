@@ -46,30 +46,8 @@ func TestReadFrameUnmasksEverySizeClass(t *testing.T) {
 	}
 }
 
-// __ParseJSONBlob looks for a `messages` array and __ParseJSONObject refuses any response with no
-// `headers` object, so a reply missing either is discarded without a word.
-func TestReplyCarriesMessagesAndHeaders(t *testing.T) {
-	out := reply([]byte(`{"action":"/websocket/go-online","headers":{"request-id":"abc"}}`), "tok")
-	if out == nil {
-		t.Fatal("a request with an action was not answered")
-	}
-	var env struct {
-		Messages []struct {
-			Headers map[string]any `json:"headers"`
-			Body    map[string]any `json:"body"`
-		} `json:"messages"`
-	}
-	if err := json.Unmarshal(out, &env); err != nil {
-		t.Fatal(err)
-	}
-	if len(env.Messages) != 1 {
-		t.Fatalf("expected one message, got %d: %s", len(env.Messages), out)
-	}
-	h := env.Messages[0].Headers
-	if h["request-id"] != "abc" || h["action"] != "/websocket/go-online" || h["statusCode"] != 200.0 {
-		t.Errorf("headers do not match the request: %s", out)
-	}
-	// A frame with no action is not a request and must not be answered.
+// A frame with no action is not a request and must not be answered.
+func TestFrameWithoutActionIsNotAnswered(t *testing.T) {
 	if reply([]byte(`{"headers":{}}`), "tok") != nil {
 		t.Error("a frame with no action was answered")
 	}
@@ -109,5 +87,53 @@ func TestSubprotocolIsEchoed(t *testing.T) {
 	}
 	if got != "t17be" {
 		t.Fatalf("subprotocol echoed as %q, want %q", got, "t17be")
+	}
+}
+
+// The client's parsers accept exactly one shape, and each part of it was read out of the binary:
+// `action` must be the literal "response" (0x693af0 switches on it and drops anything else),
+// `request-id` must stay a number inside `headers`, and `statusCode` must be a number at the
+// element root rather than inside `headers`.
+func TestReplyMatchesTheClientsParser(t *testing.T) {
+	out := reply([]byte(`{"action":"/websocket/go-online","headers":{"request-id":41,"Authorization":"Bearer x"},"body":{}}`), "tok")
+	if out == nil {
+		t.Fatal("no reply produced")
+	}
+
+	var got struct {
+		Messages []struct {
+			Action     string          `json:"action"`
+			StatusCode *int            `json:"statusCode"`
+			Headers    map[string]any  `json:"headers"`
+			Body       json.RawMessage `json:"body"`
+		} `json:"messages"`
+	}
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("reply is not valid JSON: %v (%s)", err, out)
+	}
+	if len(got.Messages) != 1 {
+		t.Fatalf("got %d messages, want 1: %s", len(got.Messages), out)
+	}
+	m := got.Messages[0]
+	if m.Action != "response" {
+		t.Errorf(`action = %q, want "response" — anything else is "Unknown Action Type --> Ignoring"`, m.Action)
+	}
+	if m.StatusCode == nil || *m.StatusCode != 200 {
+		t.Errorf("statusCode at the element root = %v, want 200", m.StatusCode)
+	}
+	if _, inHeaders := m.Headers["statusCode"]; inHeaders {
+		t.Error("statusCode must be at the element root, not inside headers")
+	}
+	id, ok := m.Headers["request-id"].(float64)
+	if !ok || id != 41 {
+		t.Errorf("headers[request-id] = %#v, want the number 41 — a string is dropped by the client", m.Headers["request-id"])
+	}
+}
+
+// A frame whose request-id is a JSON number must not be refused outright: decoding headers into
+// map[string]string used to fail here and the whole frame was ignored.
+func TestNumericRequestIDIsAccepted(t *testing.T) {
+	if reply([]byte(`{"action":"/player/get-account","headers":{"request-id":7}}`), "tok") == nil {
+		t.Fatal("a numeric request-id was refused")
 	}
 }
