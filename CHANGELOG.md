@@ -17,8 +17,11 @@ Also removed two experiments that would break a session that works: the unprompt
 `{"messages":[]}` greeting (an empty array reaches the branch that marks a pending request
 complete) and the close frame after three unanswered pings. The idle ping stays.
 
-None of this was why the socket sat silent — that was Ryujinx answering `nn::ssl` `Pending` with a
-hardcoded zero, so the client never read anything we sent. See `docs/protocol.md`.
+None of this was why the socket sits silent: the client never reads what we send, measured through a
+stuck `Recv-Q`. A hardcoded `0` from Ryujinx's `nn::ssl` `Pending` is the leading candidate for that
+and is now fixed in the fork, but it is **not confirmed** — Eden implements the same call as
+`SSL_pending()`, which would also be zero here. The fork now traces every `nn::ssl` command so one
+run settles it. See `docs/protocol.md`.
 
 ## v0.3.1 — 2026-09-26
 

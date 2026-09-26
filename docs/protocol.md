@@ -194,12 +194,23 @@ For `action: "message"` (`0x694180`) the element carries `messageSystemId`, `mes
 **Do not send anything unprompted.** An empty `messages` array reaches the branch that marks a
 pending request complete.
 
-## Why the socket used to sit in silence — it was not the protocol
+## Why the socket sits in silence — measured, and still open
 
-The client wrote its upgrade request and then never read a byte: `ss -tnp` showed the `Recv-Q` on the
-console's side stuck at 264 bytes for ten minutes. The cause was in **our emulator**, not this
-server and not the game: Ryujinx's `SslManagedSocketConnection.Pending()` returned a hardcoded `0`,
-and `nn::ssl::Connection::Pending` is how this client asks whether there is anything to read. It was
-told "nothing", forever, and so never called `Read`. Fixed in the Ryujinx fork by answering with the
-socket's real available count. The ttl ceiling, the `blockList` type, the subprotocol echo and the
-greeting were all changes aimed at a server that was never being read.
+**Measured.** The client writes its upgrade request and then never reads a byte: `ss -tnp` on the
+console's host showed `Recv-Q` stuck at 264 bytes for ten minutes, and Ryujinx's `Read` drains the
+socket whenever it is called, so it is not being called. Until that changes, nothing this server
+sends can matter — which is why the ttl ceiling, the `blockList` type, the subprotocol echo and the
+greeting all changed nothing.
+
+**The leading candidate, not yet confirmed.** Ryujinx's `SslManagedSocketConnection.Pending()`
+returned a hardcoded `0`, and `nn::ssl::Connection::Pending` is one of the two ways a non-blocking
+client asks whether there is anything to read (`Peek` is the other, and it is stubbed to
+`WouldBlock` on purpose for Nintendo's curl). A client gated on it would never read. Against that
+reading: Eden implements the same call as `SSL_pending()`, which reports **plaintext already
+decrypted and not yet read** — also zero in this situation — so if the client were gated on strict
+`Pending` semantics it would stall on hardware too, and it does not.
+
+The fork now answers `Pending` truthfully (1 when the socket has data or plaintext may be buffered)
+and, more usefully, traces every `nn::ssl` command on a traced host, including the `WouldBlock`
+reads and `DoHandshakeGetServerCert` that were previously invisible. One run says definitively which
+call the client is waiting on. Do not treat `Pending` as the answer until that log exists.
