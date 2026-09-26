@@ -1,5 +1,13 @@
 # Changelog — t17
 
+## v0.7.1 — 2026-09-26
+
+**Fixes a v0.7.0 regression: the friend-invite directions are the outer keys.**
+`InternalResponse_GetFriendInvites` (`0x66c1d0`) reads `incoming` at the body root as an object,
+then `invites` inside it as an array, then the same for `outgoing`. v0.7.0 had it inverted — an
+`invites` object holding the two directions — and both a real console and Ryujinx abandoned the
+session four requests in, where v0.6.0 had carried them past six.
+
 ## v0.7.0 — 2026-09-26
 
 The client now runs the whole online flow — go-online, friend invites, session invites, storage,

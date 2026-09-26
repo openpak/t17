@@ -59,11 +59,17 @@ var routes = map[string]route{
 	"/friends/get-blocked-players": {func(map[string]any, *client) map[string]any {
 		return map[string]any{"blockList": []any{}}
 	}},
-	// InternalResponse_GetFriendInvites reads `invites` as an OBJECT holding `incoming` and
-	// `outgoing` arrays, each entry a globalPlayerId and displayName. It rejects a display name that
-	// is not a full name, per direction ("Incoming --> Bad Full Name"); empty lists avoid that.
+	// InternalResponse_GetFriendInvites (0x66c1d0) reads, in this order: `incoming` at the body
+	// root, which must be an OBJECT, then `invites` inside it, which must be an ARRAY of
+	// {globalPlayerId, displayName} — then the same for `outgoing`. The outer keys are the
+	// directions; `invites` is nested inside each. Getting that inverted made both a console and
+	// Ryujinx abandon the session four requests in. It also rejects a display name that is not a
+	// full name, per direction ("Incoming --> Bad Full Name"), which empty lists avoid.
 	"/friends/get-friend-invites": {func(map[string]any, *client) map[string]any {
-		return map[string]any{"invites": map[string]any{"incoming": []any{}, "outgoing": []any{}}}
+		return map[string]any{
+			"incoming": map[string]any{"invites": []any{}},
+			"outgoing": map[string]any{"invites": []any{}},
+		}
 	}},
 	"/friends/subscribe-to-friend-status-updates": {func(map[string]any, *client) map[string]any {
 		return map[string]any{"blockList": []any{}}

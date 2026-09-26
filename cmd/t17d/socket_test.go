@@ -241,15 +241,21 @@ func TestInvitesAndAccountResolution(t *testing.T) {
 		return env.Body
 	}
 
-	inv, ok := call("/friends/get-friend-invites", `{}`)["invites"].(map[string]any)
-	if !ok {
-		t.Fatal("invites must be an object holding incoming and outgoing")
+	// The directions are the outer keys and each holds an `invites` array. Inverting this — an
+	// `invites` object holding the directions — made both a console and Ryujinx give up on the
+	// session four requests in.
+	got := call("/friends/get-friend-invites", `{}`)
+	for _, dir := range []string{"incoming", "outgoing"} {
+		side, ok := got[dir].(map[string]any)
+		if !ok {
+			t.Fatalf("%s must be an object at the body root, got %#v", dir, got[dir])
+		}
+		if _, ok := side["invites"].([]any); !ok {
+			t.Errorf("%s.invites must be an array, got %#v", dir, side["invites"])
+		}
 	}
-	if _, ok := inv["incoming"]; !ok {
-		t.Error("invites is missing incoming")
-	}
-	if _, ok := inv["outgoing"]; !ok {
-		t.Error("invites is missing outgoing")
+	if _, wrong := got["invites"]; wrong {
+		t.Error("there is no `invites` key at the body root — the directions are the outer keys")
 	}
 
 	accounts, _ := call("/player/get-platform-accounts",

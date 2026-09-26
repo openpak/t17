@@ -328,6 +328,9 @@ order `session`, `players`, `id`, `closedToNewPlayers`, `membersCanInviteOthers`
 **A player is parsed by `0x696370`** from `globalPlayerId`, `displayName`, `platformId`,
 `platformPlayerId`, `deviceId`, `gameId`, `connected`, `chunk`, `liveData`, `linkedAccounts`.
 
-**`invites` is an object**, `{incoming: [], outgoing: []}` (`0x66c1d0`), while
+**Friend invites nest the other way round:** `{"incoming":{"invites":[]},"outgoing":{"invites":[]}}`.
+`0x66c1d0` reads `incoming` at the body root (an object), then `invites` inside it (an array of
+`{globalPlayerId, displayName}`), then the same for `outgoing`. An `invites` object holding the two
+directions is wrong and costs the session. Meanwhile
 `/player/get-platform-accounts` answers `accounts[]` of `{globalPlayerId, platformPlayerId}`
 (`0x67c730`) — the bridge from the console's friend list to T17BE players.
