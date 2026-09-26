@@ -107,7 +107,7 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 		default:
 			idle = 0
 			log.Printf("[t17] socket <<< op=%d len=%d %s", op, len(payload), payload)
-			if reply := reply(payload, token); reply != nil {
+			if reply := s.reply(payload, token); reply != nil {
 				log.Printf("[t17] socket >>> %s", reply)
 				if err := writeText(rw, reply); err != nil {
 					log.Printf("[t17] socket: write failed (%v)", err)
@@ -130,10 +130,11 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 //	                  `statusCode` as a NUMBER at the element root, not inside headers. `body` is
 //	                  optional; absent, the client zeroes it. 200 is the success path — 400 maps to
 //	                  its error 8, 403 to 7, 404 to 5, and >=500 or 429 fails the request outright.
-func reply(frame []byte, token string) []byte {
+func (s *server) reply(frame []byte, token string) []byte {
 	var in struct {
 		Action  string                     `json:"action"`
 		Headers map[string]json.RawMessage `json:"headers"`
+		Body    map[string]any             `json:"body"`
 	}
 	if err := json.Unmarshal(frame, &in); err != nil || in.Action == "" {
 		return nil
@@ -148,11 +149,21 @@ func reply(frame []byte, token string) []byte {
 		log.Printf("[t17] socket: request %q carries no request-id — the client will ignore any reply", in.Action)
 	}
 
+	// Dispatch through the recovered route table (routes.go). An action we do not know still gets
+	// a 200 with an empty body rather than silence: the client's own handler for it may need
+	// nothing, and if it needs a field it names the missing one in a log we can read.
+	body := map[string]any{}
+	if r, ok := routes[in.Action]; ok {
+		body = r.body(in.Body, &client{s: s, token: token})
+	} else {
+		log.Printf("[t17] socket: no route for %q — answering 200 with an empty body", in.Action)
+	}
+
 	msg := map[string]any{
 		"action":     "response",
 		"headers":    headers,
 		"statusCode": 200,
-		"body":       map[string]any{},
+		"body":       body,
 	}
 	out, _ := json.Marshal(map[string]any{"messages": []any{msg}})
 

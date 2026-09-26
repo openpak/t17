@@ -62,9 +62,14 @@ func main() {
 }
 
 type server struct {
-	self string
-	keys *keyCache
+	self  string
+	keys  *keyCache
+	names names
 }
+
+// nameFor is the display name minted for a player at get-token, remembered because T17BE needs a
+// full name (with its '#') everywhere it reports one back.
+func (s *server) nameFor(id string) string { return s.names.get(id) }
 
 // route dispatches on the hostname, because which of the three tiers a request belongs to is the
 // only thing that distinguishes them: all three arrive on one port behind Traefik.

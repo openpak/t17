@@ -1,5 +1,18 @@
 # Changelog — t17
 
+## v0.5.0 — 2026-09-26
+
+**The whole route surface, implemented from the decompiled client rather than discovered one game
+launch at a time.** All 707 functions in T17BE's native library were decompiled; every route, its
+request fields and its response fields are in `docs/protocol.md` with the addresses, named by the
+binary itself — 40 routes, 32 request builders, 20 response handlers.
+
+- `cmd/t17d/routes.go` answers all 40, with the fields each handler refuses to work without:
+  `session` (type, sessionId, owner, maxPlayers) for `/sessions/create`, `friends` /`blockList` /
+  `invites` for the collection routes, a `chunk` for `/live/get`, `globalPlayerId` + a full
+  `displayName` (with its `#`) for `/player/get-account`.
+- An unknown action now gets a 200 with an empty body and a log line, instead of silence.
+
 ## v0.4.0 — 2026-09-26
 
 The reply shape is now read out of the client's own parsers instead of inferred, and it was wrong

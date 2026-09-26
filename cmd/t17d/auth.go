@@ -82,6 +82,8 @@ func (s *server) getToken(w http.ResponseWriter, r *http.Request) {
 	// a type mismatch and takes the whole auth step down silently. `blockList` is an array here
 	// even though the native SDK wants a stringified chunk — the native side never sees this
 	// JSON, the C# rebuilds one for it.
+	s.names.set(id, name)
+
 	writeJSON(w, 200, map[string]any{
 		"websocketUrl":     "wss://game." + s.self + "/socket",
 		"token":            s.mintToken(id),

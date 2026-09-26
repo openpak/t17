@@ -48,7 +48,7 @@ func TestReadFrameUnmasksEverySizeClass(t *testing.T) {
 
 // A frame with no action is not a request and must not be answered.
 func TestFrameWithoutActionIsNotAnswered(t *testing.T) {
-	if reply([]byte(`{"headers":{}}`), "tok") != nil {
+	if (&server{}).reply([]byte(`{"headers":{}}`), "tok") != nil {
 		t.Error("a frame with no action was answered")
 	}
 }
@@ -95,7 +95,7 @@ func TestSubprotocolIsEchoed(t *testing.T) {
 // `request-id` must stay a number inside `headers`, and `statusCode` must be a number at the
 // element root rather than inside `headers`.
 func TestReplyMatchesTheClientsParser(t *testing.T) {
-	out := reply([]byte(`{"action":"/websocket/go-online","headers":{"request-id":41,"Authorization":"Bearer x"},"body":{}}`), "tok")
+	out := (&server{}).reply([]byte(`{"action":"/websocket/go-online","headers":{"request-id":41,"Authorization":"Bearer x"},"body":{}}`), "tok")
 	if out == nil {
 		t.Fatal("no reply produced")
 	}
@@ -133,7 +133,72 @@ func TestReplyMatchesTheClientsParser(t *testing.T) {
 // A frame whose request-id is a JSON number must not be refused outright: decoding headers into
 // map[string]string used to fail here and the whole frame was ignored.
 func TestNumericRequestIDIsAccepted(t *testing.T) {
-	if reply([]byte(`{"action":"/player/get-account","headers":{"request-id":7}}`), "tok") == nil {
+	if (&server{}).reply([]byte(`{"action":"/player/get-account","headers":{"request-id":7}}`), "tok") == nil {
 		t.Fatal("a numeric request-id was refused")
+	}
+}
+
+// Each of these is a field some handler in the client refuses to work without, named in its own
+// "Missing …" log line. They are recovered facts, not preferences, so they get pinned here.
+func TestRoutesAnswerWhatTheHandlersRequire(t *testing.T) {
+	s := &server{}
+	s.names.set("p1", "tobagin#7016")
+	tok := "t17-p1-abc"
+
+	body := func(action, reqBody string) map[string]any {
+		frame := `{"action":"` + action + `","headers":{"request-id":1},"body":` + reqBody + `}`
+		out := s.reply([]byte(frame), tok)
+		if out == nil {
+			t.Fatalf("%s was not answered", action)
+		}
+		var env struct {
+			Messages []struct {
+				Body map[string]any `json:"body"`
+			} `json:"messages"`
+		}
+		if err := json.Unmarshal(out, &env); err != nil || len(env.Messages) != 1 {
+			t.Fatalf("%s: bad envelope %s", action, out)
+		}
+		return env.Messages[0].Body
+	}
+
+	// InternalResponse_GetPlayerAccount reads both, and the display name must be a full name --
+	// T17BE splits it at '#' and fails when there is no separator.
+	acct := body("/player/get-account", `{"platformId":"nintendo"}`)
+	if acct["globalPlayerId"] != "p1" {
+		t.Errorf("get-account globalPlayerId = %v, want p1", acct["globalPlayerId"])
+	}
+	if name, _ := acct["displayName"].(string); !strings.Contains(name, "#") {
+		t.Errorf("get-account displayName = %q, must contain '#'", name)
+	}
+
+	// "Missing pResponseBody" / "Missing Response Body" handlers.
+	if _, ok := body("/friends/get-friends-and-status", `{}`)["friends"]; !ok {
+		t.Error("get-friends-and-status must carry friends")
+	}
+	if _, ok := body("/friends/get-blocked-players", `{}`)["blockList"]; !ok {
+		t.Error("get-blocked-players must carry blockList")
+	}
+	if _, ok := body("/friends/subscribe-to-friend-status-updates", `{}`)["blockList"]; !ok {
+		t.Error("subscribe-to-friend-status-updates must carry blockList")
+	}
+	if _, ok := body("/sessions/list-invites", `{}`)["invites"]; !ok {
+		t.Error("list-invites must carry invites")
+	}
+	if _, ok := body("/live/get", `{"dataKey":"k"}`)["chunk"]; !ok {
+		t.Error("live/get must carry a chunk — the handler logs 'Missing Response Body'")
+	}
+
+	// InternalResponse_SessionsCreate rejects an empty type, a bad maxPlayers, a bad sessionId and
+	// a bad sessionOwner, each with its own log line.
+	sess, ok := body("/sessions/create", `{"type":"","maxPlayers":0}`)["session"].(map[string]any)
+	if !ok {
+		t.Fatal("sessions/create must carry a session object")
+	}
+	if sess["type"] == "" || sess["sessionId"] == "" || sess["owner"] == "" {
+		t.Errorf("sessions/create left a required field empty: %#v", sess)
+	}
+	if n, _ := sess["maxPlayers"].(float64); n < 1 {
+		t.Errorf("sessions/create maxPlayers = %v, must be at least 1", sess["maxPlayers"])
 	}
 }

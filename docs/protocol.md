@@ -214,3 +214,72 @@ The fork now answers `Pending` truthfully (1 when the socket has data or plainte
 and, more usefully, traces every `nn::ssl` command on a traced host, including the `WouldBlock`
 reads and `DoHandshakeGetServerCert` that were previously invisible. One run says definitively which
 call the client is waiting on. Do not treat `Pending` as the answer until that log exists.
+
+## The complete route surface (recovered 2026-09-26, not inferred)
+
+All 707 functions in T17BE's native library were decompiled (`scratch/mo2/decomp/all`, Ghidra
+headless via `pyghidra`). The library spans module vaddr `0x66a3f8`-`0x6977c8` across eight source
+files — `T17BE_{Transport,System,MainSystem,FriendSystem,SessionSystem,StorageSystem,LiveDataSystem,UID}.cpp`
+— plus its own websocket at `0x69e000`. Every function below names itself in its log strings, so
+these are the game's names, not ours. **40 routes, 32 request builders, 20 response handlers.**
+
+Request fields are the keys the builder writes; response fields are the keys the handler reads.
+
+| Route | Builder | Request fields | Response fields |
+|---|---|---|---|
+| `/websocket/go-online` | `Transport::InternalRequest_GoOnline` `0x6952f0` | `chunk` | — status only |
+| `/websocket/ping` | `Transport::InternalResponse_Ping` `0x692740` | `description` | — |
+| `/websocket/start-reconnection` | `Transport::InternalRequest_StartReconnection` `0x692840` | — | `reconnectionToken` (required) |
+| `/websocket/complete-reconnection` | `Transport::InternalRequest_CompleteReconnection` `0x692920` | `reconnectionToken` | — |
+| `/auth/renew-token` | `Transport::__TryReAuth` `0x692140` | — | `AuthToken` (required) |
+| `/player/get-account` | `MainSystem::InternalRequest_GetPlayerAccount` `0x67cd30` | `platformId` | `globalPlayerId`, `displayName` |
+| `/player/update-display-name` | `MainSystem::InternalRequest_UpdateDisplayName` `0x67cc00` | `newDisplayName` | `newDisplayName` (must be a *full* name) |
+| `/player/get-platform-accounts` | `MainSystem::InternalRequest_BatchGetPlayerGlobalIDList` `0x67d6d0` | `platformId`, `platformPlayerIds` | `globalPlayerId`, `platformPlayerId` |
+| `/service/send-report-sns` | `MainSystem::InternalRequest_SendReportSNS` `0x67d520` | `subject`, `message` | — |
+| `/service/trigger-kill-switch` | `MainSystem::InternalRequest_TriggerKillSwitch` `0x67d3c0` | `gameId`, `platformId`, `killState` | — |
+| `/friends/get-friends-and-status` | `FriendSystem::InternalRequest_GetFriendsAndStatus` `0x66e5c0` | — | `friends` (body required) |
+| `/friends/get-friend-invites` | `FriendSystem::InternalRequest_GetFriendInvites` `0x66f2a0` | `incomingPaginate`, `outgoingPaginate` | `invites[]` of `globalPlayerId`, `displayName` |
+| `/friends/get-blocked-players` | `FriendSystem::InternalRequest_GetBlockedPlayers` `0x66e7b0` | `paginate` | body required |
+| `/friends/subscribe-to-friend-status-updates` | same builder | — | `blockList` |
+| `/friends/block-player`, `/friends/unblock-player` | same builder | — | `globalPlayerID` (required) |
+| `/friends/send-friend-invite` | — | — | `globalPlayerId`, `displayName` |
+| `/friends/withdraw-friend-invite` | `FriendSystem::InternalRequest_WithdrawInvite` `0x66f190` | `inviteeGlobalPlayerId` | — |
+| `/friends/{accept,reject}-friend-invite`, `/friends/remove-friend`, `/friends/unsubscribe-to-friend-status-updates` | — | — | status only |
+| `/sessions/create` | `SessionSystem::InternalRequest_SessionsCreate` `0x68aa10` | `game`, `group`, `type`, `chunk`, `maxPlayers`, `membersCanInviteOthers`, `closedToNewPlayers`, `supportedPlatforms` | `session` with `players`, `owner`, `maxPlayers`, `membersCanInviteOthers`, `closedToNewPlayers`, `chunk`, `game`, `group`, `supportedPlatforms` |
+| `/sessions/update` | `…SessionsUpdate` `0x6897d0` | `sessionId` + the create fields | as create |
+| `/sessions/accept-invite` | `…SessionsAcceptInvite` `0x68a270` | `sessionId`, `inviterId` | `session` details (required) |
+| `/sessions/list-invites` | `…SessionsListInvites` `0x68a110` | — | `invites[]` of `sessionId`, `inviter`, `invitee`, `supportedPlatforms` |
+| `/sessions/send-invite`, `/withdraw-invite` | `…SessionsSendInvite` `0x689d90`, `…WithdrawInvite` `0x689f60` | `sessionId`, `inviteeId` | — |
+| `/sessions/reject-invite` | `…SessionsRejectInvite` `0x68a7b0` | `sessionId`, `inviterId` | — |
+| `/sessions/kick-player`, `/grant-ownership` | `0x689bf0`, `0x68a560` | `sessionId`, `globalPlayerId` | — |
+| `/sessions/leave`, `/sessions/close` | `0x68a420`, `0x689ab0` | `sessionId` | — |
+| `/live/get` | `LiveDataSystem::InternalRequest_Get` `0x6788b0` | `dataKey`, `globalPlayerId` | body required ("Missing Response Body") |
+| `/live/put`, `/live/patch` | `0x678fb0`, `0x6790e0` | `chunk` | — |
+| `/storage/get`, `/put`, `/delete` | `0x68d430`, `0x68d720`, `0x68da60` | `dataRole` (`client`/`server`/`service`), `platformId`, `gameId`, `globalPlayerId`, `slot`, `value` on put | — |
+| `/storage/get-file-url` | `0x68dd30` | the storage fields plus `method` (`GET`/`PUT`/`DELETE`) | — |
+
+**Required fields are enforced and each one announces itself.** `InternalResponse_SessionsCreate`
+has a separate log line for an empty session type, a bad `maxPlayers`, a bad `sessionId` and a bad
+`sessionOwner`. `InternalResponse_GetFriendsAndStatus` and `_GetBlockedPlayers` log
+`Missing pResponseBody`; `LiveDataSystem::InternalResponse_Get` logs `Missing Response Body`;
+`_BlockPlayer`/`_UnblockPlayer` log `Missing globalPlayerID in parameter 1`. A display name that
+comes back without a `#` fails the full-name split — `_GetFriendInvites` rejects it per direction
+("Incoming --> Bad Full Name").
+
+**Server pushes** use `action: "message"` and go to `MainSystem::InternalRequest_MessageSend`'s
+counterpart: `messageProtocolVersion`, `messageSystemId`, `messageType`, `message`, and a target of
+`to` / `globalPlayerId` / `globalPlayerIds` / `sessionId`, with `exclude` for broadcast.
+
+### The core's own state machine (`0x68eff0`)
+
+```
+0 -> 1 -> sends /websocket/go-online -> 2
+2  waits on core+0xb1 (set by the go-online 200), then core+0xa0 == 1 ? 3 : 5
+3  initialises Friend (/friends/get-friend-invites) and Session (/sessions/list-invites) -> 4
+4  waits on core+0x1be and core+0x25a (their ready flags) -> 5
+5  ONLINE: the queued-request flush in 0x6925d0 runs only in this state
+```
+
+`Core::Update` (`0x690fc0`) returns immediately unless `core+0` is set, and
+`Transport::Update` (`0x691db0`) needs both its active byte at `+8` **and** a websocket pointer at
+`+0x10` — which `Initialise` takes as an argument and stores via `0x68ecc0`.
