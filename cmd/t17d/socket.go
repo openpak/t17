@@ -165,7 +165,13 @@ func (s *server) reply(frame []byte, token string) []byte {
 		"statusCode": 200,
 		"body":       body,
 	}
-	out, _ := json.Marshal(map[string]any{"messages": []any{msg}})
+	// Unwrapped, on purpose. A websocket frame is parsed and handed straight to
+	// __ParseJSONObject (f_6933f0 -> f_693af0), which reads `action` from the frame's ROOT. The
+	// `messages` array belongs to __ParseJSONBlob (0x6930f0), which serves the HTTP path; wrapping a
+	// socket reply in it leaves the root with no `action` at all, and the client logs
+	// "no ACTION is message --> Ignoring" and drops it -- silently, which is what made this look
+	// like the client ignoring a correct answer.
+	out, _ := json.Marshal(msg)
 
 	return out
 }

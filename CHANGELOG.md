@@ -1,5 +1,17 @@
 # Changelog — t17
 
+## v0.6.0 — 2026-09-26
+
+**A socket reply must not be wrapped in `messages`.** The websocket receive path (`f_6933f0`, the
+entry `BE_Transport_WebSocket_OnReceive` calls) parses the frame and hands the **root** to
+`__ParseJSONObject`, which reads `action` there. The `messages` array belongs to `__ParseJSONBlob`,
+which serves the HTTP path. Our wrapped reply left the root with no `action`, so every answer was
+dropped with `no ACTION is message --> Ignoring` — silently.
+
+That was the whole remaining blocker: `BE_IsReady` is `ldrb w0, [x0, #0xb1]; ret`, the byte only
+`InternalResponse_GoOnline` sets, so the C# polled it for 60 s and hung up. Which is exactly what
+the 2026-09-26 20:32 run did, 67 seconds after going online.
+
 ## v0.5.0 — 2026-09-26
 
 **The whole route surface, implemented from the decompiled client rather than discovered one game

@@ -100,21 +100,15 @@ func TestReplyMatchesTheClientsParser(t *testing.T) {
 		t.Fatal("no reply produced")
 	}
 
-	var got struct {
-		Messages []struct {
-			Action     string          `json:"action"`
-			StatusCode *int            `json:"statusCode"`
-			Headers    map[string]any  `json:"headers"`
-			Body       json.RawMessage `json:"body"`
-		} `json:"messages"`
+	var m struct {
+		Action     string          `json:"action"`
+		StatusCode *int            `json:"statusCode"`
+		Headers    map[string]any  `json:"headers"`
+		Body       json.RawMessage `json:"body"`
 	}
-	if err := json.Unmarshal(out, &got); err != nil {
+	if err := json.Unmarshal(out, &m); err != nil {
 		t.Fatalf("reply is not valid JSON: %v (%s)", err, out)
 	}
-	if len(got.Messages) != 1 {
-		t.Fatalf("got %d messages, want 1: %s", len(got.Messages), out)
-	}
-	m := got.Messages[0]
 	if m.Action != "response" {
 		t.Errorf(`action = %q, want "response" — anything else is "Unknown Action Type --> Ignoring"`, m.Action)
 	}
@@ -152,14 +146,12 @@ func TestRoutesAnswerWhatTheHandlersRequire(t *testing.T) {
 			t.Fatalf("%s was not answered", action)
 		}
 		var env struct {
-			Messages []struct {
-				Body map[string]any `json:"body"`
-			} `json:"messages"`
+			Body map[string]any `json:"body"`
 		}
-		if err := json.Unmarshal(out, &env); err != nil || len(env.Messages) != 1 {
+		if err := json.Unmarshal(out, &env); err != nil {
 			t.Fatalf("%s: bad envelope %s", action, out)
 		}
-		return env.Messages[0].Body
+		return env.Body
 	}
 
 	// InternalResponse_GetPlayerAccount reads both, and the display name must be a full name --
@@ -200,5 +192,22 @@ func TestRoutesAnswerWhatTheHandlersRequire(t *testing.T) {
 	}
 	if n, _ := sess["maxPlayers"].(float64); n < 1 {
 		t.Errorf("sessions/create maxPlayers = %v, must be at least 1", sess["maxPlayers"])
+	}
+}
+
+// A socket reply must be a bare object: f_6933f0 parses the frame and hands the ROOT to
+// __ParseJSONObject, which reads `action` there. Wrapped in a `messages` array — the HTTP path's
+// envelope — the root has no action and the client silently ignores it.
+func TestSocketReplyIsNotWrappedInMessages(t *testing.T) {
+	out := (&server{}).reply([]byte(`{"action":"/websocket/go-online","headers":{"request-id":1}}`), "t17-p1-x")
+	var root map[string]any
+	if err := json.Unmarshal(out, &root); err != nil {
+		t.Fatalf("not valid JSON: %v", err)
+	}
+	if _, wrapped := root["messages"]; wrapped {
+		t.Errorf("socket reply is wrapped in messages: %s", out)
+	}
+	if root["action"] != "response" {
+		t.Errorf(`root action = %v, want "response": %s`, root["action"], out)
 	}
 }

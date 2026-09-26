@@ -156,6 +156,38 @@ Also unverified: whether `/live/get` carries the Photon **Fusion AppId**. No App
 the build — `PhotonAppSettings` holds none and the C# has `CustomPhotonAppSettings` — so if it
 arrives from this backend, OpenPak chooses it and `servers/photon` can accept whatever we hand out.
 
+## Correction: a socket reply is NOT wrapped in `messages`
+
+The first version of this section had the envelope wrong, and the mistake cost a release and two
+game launches. The receive path decides it, and it is short — `f_6933f0` is the entry the C# calls
+from `BE_Transport_WebSocket_OnReceive`:
+
+```c
+f_670180(&doc, &data);            // parse the frame as JSON
+if (parseError == 0)
+    f_693af0(param_1, &doc, 1);   // __ParseJSONObject, with the ROOT
+```
+
+So **the frame's root is the message**:
+
+```json
+{"action":"response","headers":{"request-id":1},"statusCode":200,"body":{}}
+```
+
+`__ParseJSONBlob` (`0x6930f0`), which wants a `messages` array and takes a status argument, serves
+the **HTTP** path instead. A socket frame wrapped in `messages` has no `action` at its root, so
+`__ParseJSONObject` logs `no ACTION is message --> Ignoring` and drops it without a trace — which
+looks exactly like a client that ignores a correct answer.
+
+**How this was caught, so the next one is caught faster:** `BE_IsReady` is a P/Invoke to
+`0x691200`, and that function is two instructions — `ldrb w0, [x0, #0xb1]; ret`. The C# polls that
+one byte, `InternalResponse_GoOnline` is the only thing that sets it, and the C# gives up after
+~60 s. A client that goes online, sits for exactly 60 s and hangs up is telling you its response
+never reached the handler.
+
+Also corrected: transport `+0x10` is the **System** pointer, not the websocket — `0x68ecc0` logs
+"Missing System --> Bailing" when it is null.
+
 ## The websocket message contract (read out of the client's parsers, 2026-09-26)
 
 Every address below is a module vaddr in Moving Out 2 1.3.315's `main`. This replaces everything
