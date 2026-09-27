@@ -1,5 +1,15 @@
 # Changelog — t17
 
+## v0.11.2 — 2026-09-27
+
+**Session pushes are addressed to `SESN`, not `2`.** Read from the joiner itself this time: its
+`RequestXPlaySessionInviteFromPlatformSessionTask` asked for an invite, our `SessionInviteReceived`
+push reached its socket 120 ms later, and the task failed on its ten-second timeout anyway. The
+client's message arm decides whether a push belongs to one of its own systems by comparing
+`messageSystemId` with four names — `FRND`, `SESN`, `CORE`, `SRVC` (`0x691210`) — and hands anything
+else to the game as an application message. We sent `"2"`, the session system's number in the request
+factory, so **no session push this server ever sent was seen by the session system**.
+
 ## v0.11.1 — 2026-09-27
 
 **A person in a session push is a whole player, not an id.** With the relay in place the join got

@@ -345,12 +345,14 @@ A push is a frame of its own:
 
 ```json
 {"action":"message",
- "body":{"messageSystemId":"2","messageType":2007,"messageProtocolVersion":"1",
+ "body":{"messageSystemId":"SESN","messageType":2007,"messageProtocolVersion":"1",
          "from":"<globalPlayerId>","message":{ ...payload... }}}
 ```
 
 `0x694180` reads `body` at the frame root ("No Body - REQUIRED FOR MESSAGES!!!" without it),
-`messageSystemId` as a **string**, `messageType` as a number, `from` and `messageProtocolVersion`
+`messageSystemId` as a **string** — and `0x691210` takes it for one of the client's own systems
+only when it is `FRND`, `SESN`, `CORE` or `SRVC`; anything else goes to the game as an application
+message (that is how `XPSM` travels) — `messageType` as a number, `from` and `messageProtocolVersion`
 optionally, and the payload under `message` ("No inner Message Body for Message" without it). A
 `from` on the block list is dropped.
 

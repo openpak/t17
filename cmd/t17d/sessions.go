@@ -136,16 +136,22 @@ func (st *sessionStore) invitesFor(invitee string) []invite {
 // The session-system message types, from the dispatcher's jump table at 0x6821a0: it subtracts 2000
 // and allows twelve cases, the same numbers the request builders use.
 const (
-	msgSessionUpdated      = 2000
-	msgSessionClosed       = 2001
-	msgPlayerLeft          = 2004
-	msgPlayerJoined        = 2005
-	msgInviteReceived      = 2007
-	msgInviteSent          = 2008
-	msgInviteWithdrawn     = 2009
-	msgInviteAccepted      = 2010
-	msgInviteRejected      = 2011
-	sessionSystemID        = "2"
+	msgSessionUpdated  = 2000
+	msgSessionClosed   = 2001
+	msgPlayerLeft      = 2004
+	msgPlayerJoined    = 2005
+	msgInviteReceived  = 2007
+	msgInviteSent      = 2008
+	msgInviteWithdrawn = 2009
+	msgInviteAccepted  = 2010
+	msgInviteRejected  = 2011
+	// The session system's name on the wire. The client's message arm (0x694180) asks 0x691210
+	// whether a push is for one of its own systems, and that compares messageSystemId with four
+	// names: "FRND", "SESN", "CORE", "SRVC". Anything else is handed to the game as an application
+	// message. This was "2" -- the session system's number in the request factory, which is not
+	// what the wire carries -- so no session push was ever seen by the session system: the invite
+	// a host sent in answer to a join request arrived, and the joiner timed out waiting for it.
+	sessionSystemID        = "SESN"
 	messageProtocolVersion = "1"
 )
 
