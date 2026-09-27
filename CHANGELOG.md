@@ -1,5 +1,17 @@
 # Changelog — t17
 
+## v0.9.1 — 2026-09-27
+
+**Session ids are unique per session, not per player.** The client names its Photon room after the
+session id, so `s-<ownerId>` meant every attempt rejoined the previous attempt's room — the Photon
+server logged `EnterRoom "s-aaaaaaaaaaaa0001" actor=2 occupants=[2]`, the client landed in a dead
+Fusion simulation whose host had already left, ran for a few seconds and gave up with "unable to
+create online session".
+
+Measured alongside this: the Photon chain itself already works. The client authenticates, joins the
+room named after the T17 session, is handed to the game server, enters as an actor and exchanges
+Fusion events with our `FusionHost` — so T17 session → Photon Fusion room is wired end to end.
+
 ## v0.9.0 — 2026-09-27
 
 **Real sessions, real invites, and server pushes.** Sessions were derived per connection and invite

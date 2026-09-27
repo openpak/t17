@@ -1,9 +1,13 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"hash/crc32"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // client is one websocket's worth of identity. The token carries the player id (mintToken builds
@@ -66,7 +70,7 @@ func (c *client) createSession(in map[string]any) map[string]any {
 	closed, _ := in["closedToNewPlayers"].(bool)
 
 	s := &session{
-		ID: "s-" + owner, Owner: owner, Type: kind, MaxPlayers: int(maxPlayers),
+		ID: newSessionID(owner), Owner: owner, Type: kind, MaxPlayers: int(maxPlayers),
 		CanInvite: canInvite, Closed: closed, Chunk: chunk, Platforms: platforms,
 		Players: []string{owner},
 	}
@@ -117,6 +121,21 @@ func (c *client) playerOf(id string) map[string]any {
 		"chunk":            "{}",
 		"linkedAccounts":   []any{},
 	}
+}
+
+// newSessionID is unique per session, not per player. The client names its Photon room after the
+// session id, so a deterministic "s-<owner>" meant every attempt rejoined the *previous* attempt's
+// room: the server logged `EnterRoom "s-aaaaaaaaaaaa0001" actor=2 occupants=[2]`, the client landed
+// in a dead Fusion simulation whose host had gone, and gave up after a few seconds with "unable to
+// create online session".
+func newSessionID(owner string) string {
+	var r [6]byte
+	if _, err := rand.Read(r[:]); err != nil {
+		// A clock-based id is still unique enough to avoid colliding with the previous attempt.
+		return "s-" + owner + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)
+	}
+
+	return "s-" + owner + "-" + base64.RawURLEncoding.EncodeToString(r[:])
 }
 
 func fourDigits(id string) string {

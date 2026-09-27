@@ -114,3 +114,21 @@ func TestInviteReachesTheOtherPlayer(t *testing.T) {
 		t.Error("the invite is still listed after being accepted")
 	}
 }
+
+// The client names its Photon room after the session id, so two sessions from the same player must
+// not share one: the second attempt would rejoin the first attempt's dead Fusion room.
+func TestSessionIDsAreUniquePerSession(t *testing.T) {
+	s := &server{}
+	c := &client{s: s, token: "t17-host1-x"}
+	first, _ := c.createSession(map[string]any{"type": "group"})["id"].(string)
+	second, _ := c.createSession(map[string]any{"type": "group"})["id"].(string)
+	if first == "" || second == "" {
+		t.Fatal("no session id")
+	}
+	if first == second {
+		t.Errorf("two sessions share the id %q — the second joins the first's Photon room", first)
+	}
+	if s.sessions.get(first) == nil || s.sessions.get(second) == nil {
+		t.Error("both sessions should be retrievable")
+	}
+}
