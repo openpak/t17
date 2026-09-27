@@ -15,8 +15,12 @@ type client struct {
 }
 
 func (c *client) playerID() string {
+	// mintToken builds "t17-<globalPlayerId>-<base64url hash>". Split at the FIRST dash: the id is
+	// hex and has none, while the hash is base64url and frequently does — cutting at the last dash
+	// left part of the hash glued to the id, which then became the session owner, the player entry
+	// and the display name, and the game left every session it had just created.
 	id := strings.TrimPrefix(c.token, "t17-")
-	if i := strings.LastIndexByte(id, '-'); i > 0 {
+	if i := strings.IndexByte(id, '-'); i > 0 {
 		id = id[:i]
 	}
 

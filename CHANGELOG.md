@@ -1,5 +1,16 @@
 # Changelog — t17
 
+## v0.7.2 — 2026-09-27
+
+**The player id was being parsed out of the token wrongly.** `mintToken` builds
+`t17-<globalPlayerId>-<base64url hash>`, and the hash routinely contains a dash, so splitting at the
+last dash left part of it glued to the id: a session came back with
+`"owner":"aaaaaaaaaaaa0002-YIJI930d"` and a display name of
+`"aaaaaaaaaaaa0002-YIJI930d#5020"` instead of `<user-b>#8667`. The game created the session, saw an owner
+that was not the player, and sent `/sessions/leave` immediately — "unable to create online session"
+on the console and "you have been disconnected from the session" on Ryujinx. Split at the first dash:
+the id is hex and contains none.
+
 ## v0.7.1 — 2026-09-26
 
 **Fixes a v0.7.0 regression: the friend-invite directions are the outer keys.**
