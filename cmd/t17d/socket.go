@@ -153,8 +153,12 @@ func (s *server) reply(frame []byte, token string) []byte {
 	// a 200 with an empty body rather than silence: the client's own handler for it may need
 	// nothing, and if it needs a field it names the missing one in a log we can read.
 	body := map[string]any{}
+	status := 200
 	if r, ok := routes[in.Action]; ok {
 		body = r.body(in.Body, &client{s: s, token: token})
+		if r.status != 0 {
+			status = r.status
+		}
 	} else {
 		log.Printf("[t17] socket: no route for %q — answering 200 with an empty body", in.Action)
 	}
@@ -162,7 +166,7 @@ func (s *server) reply(frame []byte, token string) []byte {
 	msg := map[string]any{
 		"action":     "response",
 		"headers":    headers,
-		"statusCode": 200,
+		"statusCode": status,
 		"body":       body,
 	}
 	// Unwrapped, on purpose. A websocket frame is parsed and handed straight to

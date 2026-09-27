@@ -181,6 +181,21 @@ func TestRoutesAnswerWhatTheHandlersRequire(t *testing.T) {
 		t.Error("live/get must carry a chunk — the handler logs 'Missing Response Body'")
 	}
 
+	// An empty storage slot answers 404: the client maps it to error 5, its "nothing stored" path,
+	// where a 200 with an empty value sends it down the has-data path with nothing in it.
+	{
+		out := s.reply([]byte(`{"action":"/storage/get","headers":{"request-id":9},"body":{"slot":"RecentlyMetPlayers_v1"}}`), tok)
+		var m struct {
+			StatusCode int `json:"statusCode"`
+		}
+		if err := json.Unmarshal(out, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m.StatusCode != 404 {
+			t.Errorf("storage/get statusCode = %d, want 404 for an empty slot", m.StatusCode)
+		}
+	}
+
 	// InternalResponse_SessionsCreate rejects an empty type, a bad maxPlayers, a bad sessionId and
 	// a bad sessionOwner, each with its own log line.
 	sess, ok := body("/sessions/create", `{"type":"","maxPlayers":0}`)["session"].(map[string]any)

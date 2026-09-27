@@ -1,5 +1,18 @@
 # Changelog — t17
 
+## v0.8.0 — 2026-09-27
+
+**An empty storage slot answers 404, not 200 with an empty value.**
+`OnDownloadRecentlyMetPlayersCallback` (`0x4b73440`, in `Team17.CrossPlay.RecentlyMetPlayers`)
+branches on the request's error code: **5** is "nothing stored" and is handled by carrying on with an
+empty list, while **0** means the body holds real data and hands it straight to the list parser. The
+response parser turns statusCode 404 into error 5 — so answering an empty slot with a 200 and
+`value: ""` sends the game down the has-data path with nothing in it. Both platforms were abandoning
+the online session immediately after that response.
+
+Routes can now carry a status other than 200, since the client maps 400 to its error 8, 403 to 7 and
+404 to 5, and some handlers treat one of those as an ordinary outcome.
+
 ## v0.7.2 — 2026-09-27
 
 **The player id was being parsed out of the token wrongly.** `mintToken` builds
