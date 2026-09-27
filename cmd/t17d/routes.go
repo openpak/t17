@@ -39,8 +39,7 @@ var routes = map[string]route{
 	// InternalResponse_BatchGetPlayerGlobalIDList reads `accounts`, each entry a globalPlayerId and
 	// platformPlayerId. This is how the game turns the console's friend list into T17BE players, so
 	// answering with an empty list leaves every friend unresolvable and uninvitable. A Switch
-	// player's globalPlayerId *is* their NSA id -- ours is, from get-token -- so the mapping is
-	// the identity one.
+	// player's globalPlayerId is made from their NSA id (globalID), so every id asked for has one.
 	"/player/get-platform-accounts": {body: func(in map[string]any, c *client) map[string]any {
 		ids, _ := in["platformPlayerIds"].([]any)
 		accounts := make([]any, 0, len(ids))
@@ -49,7 +48,7 @@ var routes = map[string]route{
 			if !ok || s == "" {
 				continue
 			}
-			accounts = append(accounts, map[string]any{"globalPlayerId": s, "platformPlayerId": s})
+			accounts = append(accounts, map[string]any{"globalPlayerId": globalID(s), "platformPlayerId": s})
 		}
 
 		return map[string]any{"accounts": accounts}

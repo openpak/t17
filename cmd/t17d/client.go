@@ -38,7 +38,7 @@ func (c *client) displayName() string {
 	}
 
 	// Fall back to the same shape get-token mints, so the '#' is never missing.
-	return id + "#" + fourDigits(id)
+	return id + "#" + fourDigits(platformID(id))
 }
 
 // createSession records a new session owned by this player and returns its wire form.
@@ -103,16 +103,16 @@ func (c *client) wire(s *session) map[string]any {
 // playerOf is one entry of a session's `players`. The parser (0x696370) reads globalPlayerId,
 // displayName, platformId, platformPlayerId, deviceId, gameId, connected, chunk, liveData and
 // linkedAccounts, and a player it cannot parse fails the whole session response. A Switch player's
-// globalPlayerId is their NSA id, so platformPlayerId is the same value.
+// platformPlayerId is their NSA id, and their globalPlayerId is made from it (globalID).
 func (c *client) playerOf(id string) map[string]any {
 	name := c.s.nameFor(id)
 	if name == "" {
-		name = id + "#" + fourDigits(id)
+		name = id + "#" + fourDigits(platformID(id))
 	}
 
 	return map[string]any{
 		"globalPlayerId":   id,
-		"platformPlayerId": id,
+		"platformPlayerId": platformID(id),
 		"displayName":      name,
 		"platformId":       "nintendo",
 		"deviceId":         "nintendo-switch",
@@ -136,6 +136,34 @@ func newSessionID(owner string) string {
 	}
 
 	return "s-" + owner + "-" + base64.RawURLEncoding.EncodeToString(r[:])
+}
+
+// globalID is the T17 global player id for a Nintendo account: the account id, left-padded with
+// zeros to the 32 digits of a GUID. The game does not treat this id as opaque. Hosting a session
+// ends in GameLobby.InternalAttachGameSessionAsync calling
+// Uid.Parse(T17SessionManager.LocalCrossPlaySessionUser.T17GlobalPlayerID), which is Guid.Parse, and
+// a bare 16-digit account id throws "FormatException: Guid should contain 32 digits with 4 dashes"
+// -- read out of the running game, on a console and an emulator alike. The Fusion runner had
+// already started; the game then shut it down and left the session it had just created, which is
+// the whole of "unable to create online session".
+//
+// Undashed, because the token is cut at its first dash to recover this id, and Guid.Parse takes 32
+// bare digits as readily as the dashed form.
+func globalID(account string) string {
+	if len(account) >= 32 {
+		return account
+	}
+
+	return strings.Repeat("0", 32-len(account)) + account
+}
+
+// platformID is the Nintendo account id a global player id was made from.
+func platformID(global string) string {
+	if account := strings.TrimLeft(global, "0"); len(global) == 32 && len(account) <= 16 {
+		return strings.Repeat("0", 16-len(account)) + account
+	}
+
+	return global
 }
 
 func fourDigits(id string) string {

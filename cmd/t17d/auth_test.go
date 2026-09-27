@@ -98,7 +98,7 @@ func TestGetTokenAnswersTheManagedClass(t *testing.T) {
 	if name, _ := got["displayName"].(string); !strings.Contains(name, "#") {
 		t.Errorf("displayName %q has no '#'", name)
 	}
-	if got["globalPlayerId"] != "aaaaaaaaaaaa0001" || got["role"] != "client" {
+	if got["globalPlayerId"] != "0000000000000000aaaaaaaaaaaa0001" || got["role"] != "client" {
 		t.Errorf("wrong identity or role: %s", w.Body)
 	}
 }

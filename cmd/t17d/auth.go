@@ -54,6 +54,8 @@ func (s *server) getToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, map[string]any{"error": "token names no subject"})
 		return
 	}
+	// From here on the player is known by their global id, which the game parses as a GUID.
+	id = globalID(id)
 
 	name := in.DisplayName
 	if name == "" {
@@ -64,7 +66,8 @@ func (s *server) getToken(w http.ResponseWriter, r *http.Request) {
 	// the displayNameFull into short!!", a path with no error string of its own, so the game goes
 	// quiet with no socket and no diagnostic. A name without a tag can never work.
 	if !strings.Contains(name, "#") {
-		name = fmt.Sprintf("%s#%04d", name, crc32.ChecksumIEEE([]byte(id))%10000)
+		// The tag is taken from the account id, as it was before the global id grew to a GUID.
+		name = fmt.Sprintf("%s#%04d", name, crc32.ChecksumIEEE([]byte(platformID(id)))%10000)
 	}
 
 	// T17BE caps the auth expiry at 10800 seconds. T17BE_Transport::Initialise checks

@@ -314,7 +314,7 @@ func TestInvitesAndAccountResolution(t *testing.T) {
 		t.Fatalf("got %d accounts for 2 platform ids: %#v", len(accounts), accounts)
 	}
 	first, _ := accounts[0].(map[string]any)
-	if first["platformPlayerId"] != "aaa" || first["globalPlayerId"] != "aaa" {
+	if first["platformPlayerId"] != "aaa" || first["globalPlayerId"] != globalID("aaa") {
 		t.Errorf("account mapping wrong: %#v", first)
 	}
 }

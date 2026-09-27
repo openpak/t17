@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // mintToken's hash is base64url, so it often contains a dash. Splitting the token at the last dash
 // left part of it glued to the player id, and that id became the session owner, the player entry and
@@ -25,5 +28,25 @@ func TestDisplayNameUsesTheMintedName(t *testing.T) {
 	c := &client{s: s, token: "t17-aaaaaaaaaaaa0002-YIJI930d-xx"}
 	if got := c.displayName(); got != "Leia#8667" {
 		t.Errorf("displayName = %q, want Leia#8667", got)
+	}
+}
+
+// The game parses a global player id with Guid.Parse, so it must be 32 hex digits, must survive
+// the token's cut at the first dash, and must give the account id back.
+func TestGlobalIDIsAGuidAndRoundTrips(t *testing.T) {
+	const account = "aaaaaaaaaaaa0001"
+	id := globalID(account)
+	if len(id) != 32 || strings.ContainsRune(id, '-') {
+		t.Fatalf("globalID(%q) = %q, want 32 undashed digits", account, id)
+	}
+	if got := platformID(id); got != account {
+		t.Fatalf("platformID(%q) = %q, want %q", id, got, account)
+	}
+	c := &client{s: &server{}, token: (&server{}).mintToken(id)}
+	if got := c.playerID(); got != id {
+		t.Fatalf("playerID() = %q, want %q", got, id)
+	}
+	if got := c.playerOf(id)["platformPlayerId"]; got != account {
+		t.Fatalf("platformPlayerId = %v, want %q", got, account)
 	}
 }

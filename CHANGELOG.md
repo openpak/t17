@@ -1,5 +1,21 @@
 # Changelog — t17
 
+## v0.10.1 — 2026-09-27
+
+**A global player id is a GUID, because the game parses it as one.** Hosting an online session in
+Moving Out 2 failed on a console and on Ryujinx alike with "unable to create online session", about a
+second after the Fusion runner started. Read out of the running game: the runner starts
+(`StartGameResult: Ok:True`), then `GameLobby.InternalAttachGameSessionAsync` calls
+`Uid.Parse(T17SessionManager.LocalCrossPlaySessionUser.T17GlobalPlayerID)` — `Guid.Parse` — and
+throws `FormatException: Guid should contain 32 digits with 4 dashes`. The game logs
+`AttachGameSessionAsync() failed: AttachmentResult=Failure`, shuts its runner down and leaves the
+session it had just created.
+
+We handed out the 16-digit Nintendo account id as the global id. It is now that id left-padded with
+zeros to 32 digits, undashed so the token still cuts at its first dash. `platformPlayerId` stays the
+account id, `/player/get-platform-accounts` maps one to the other, and the display-name tag is still
+taken from the account id so nobody's name changes.
+
 ## v0.10.0 — 2026-09-27
 
 **Player storage is real, and an unwritten slot is not a 404.** `/storage/put` remembers a value and
