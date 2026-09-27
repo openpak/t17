@@ -185,3 +185,70 @@ func (s *server) pushAll(players []string, except, from string, messageType int,
 		}
 	}
 }
+
+// relay is /messaging/send: a message from the game itself, addressed to other players, that the
+// server carries without reading. Moving Out 2 joins a session with one -- system "XPSM", type 1,
+// {"m_t17SenderId", "m_sessionId"}, sent to the host -- and waits for the host's answer; with no
+// route here the host never heard, and the joiner gave up after its timeout with "unable to join
+// online session".
+//
+// The request names its target as `to`: a globalPlayerId, a list of globalPlayerIds, or a sessionId
+// (everyone in it), less anyone in `exclude`. What goes out keeps the sender's own messageSystemId,
+// messageType and messageProtocolVersion, and `message` exactly as it came: the client's parser
+// (0x694180) hands a message for a system it does not own to the game as a STRING.
+func (c *client) relay(in map[string]any) map[string]any {
+	from := c.playerID()
+	to, _ := in["to"].(map[string]any)
+
+	var targets []string
+	if id, _ := to["globalPlayerId"].(string); id != "" {
+		targets = append(targets, id)
+	}
+	if ids, _ := to["globalPlayerIds"].([]any); len(ids) > 0 {
+		for _, id := range ids {
+			if s, _ := id.(string); s != "" {
+				targets = append(targets, s)
+			}
+		}
+	}
+	if id, _ := to["sessionId"].(string); id != "" {
+		if s := c.s.sessions.get(id); s != nil {
+			targets = append(targets, s.Players...)
+		}
+	}
+	skip := map[string]bool{from: true}
+	if ids, _ := to["exclude"].([]any); len(ids) > 0 {
+		for _, id := range ids {
+			if s, _ := id.(string); s != "" {
+				skip[s] = true
+			}
+		}
+	}
+
+	body := map[string]any{"from": from}
+	for _, k := range []string{"messageSystemId", "messageType", "messageProtocolVersion", "message"} {
+		if v, ok := in[k]; ok {
+			body[k] = v
+		}
+	}
+	for _, target := range targets {
+		if skip[target] {
+			continue
+		}
+		skip[target] = true
+		peer := c.s.conn(target)
+		if peer == nil {
+			log.Printf("[t17] relay %v/%v from %s: %s is not online", in["messageSystemId"], in["messageType"], from, target)
+
+			continue
+		}
+		if err := peer.sendJSON(map[string]any{"action": "message", "body": body}); err != nil {
+			log.Printf("[t17] relay to %s failed: %v", target, err)
+
+			continue
+		}
+		log.Printf("[t17] relay %v/%v to %s from %s", in["messageSystemId"], in["messageType"], target, from)
+	}
+
+	return map[string]any{}
+}

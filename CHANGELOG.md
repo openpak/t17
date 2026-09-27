@@ -1,5 +1,18 @@
 # Changelog — t17
 
+## v0.11.0 — 2026-09-27
+
+**`/messaging/send` is relayed.** With hosting fixed, a Switch that accepted an invite failed with
+"unable to join online session". Its log here shows why: it sent `/messaging/send` — system `XPSM`,
+type 1, `{"m_t17SenderId", "m_sessionId"}`, addressed to the host — got our empty 200 for a route we
+did not have, and gave up 36 seconds later. The host was never told.
+
+The message now goes to whoever `to` names (`globalPlayerId`, `globalPlayerIds`, or everyone in a
+`sessionId`, less `exclude`) as an `action: "message"` push carrying the sender's own
+`messageSystemId`, `messageType` and `messageProtocolVersion`, with `from` set and `message` left
+exactly as sent. The client's parser (`0x694180`) hands a message for a system it does not own to the
+game as a string, so it is relayed as one and never interpreted here.
+
 ## v0.10.1 — 2026-09-27
 
 **A global player id is a GUID, because the game parses it as one.** Hosting an online session in

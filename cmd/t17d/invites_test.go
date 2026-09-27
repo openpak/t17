@@ -132,3 +132,34 @@ func TestSessionIDsAreUniquePerSession(t *testing.T) {
 		t.Error("both sessions should be retrievable")
 	}
 }
+
+// A joiner announces itself to the host with /messaging/send and waits for the answer. The host must
+// receive exactly what was sent -- the game's own system id and type, and `message` still a string --
+// and the sender must not get its own message back.
+func TestGameMessageIsRelayedVerbatim(t *testing.T) {
+	s := &server{}
+	guest := &client{s: s, token: "t17-guest2-y"}
+	hostConn, hostOut := fakeConn()
+	s.conns.add("host1", hostConn)
+	guestConn, guestOut := fakeConn()
+	s.conns.add("guest2", guestConn)
+
+	const message = `{"m_t17SenderId":"guest2","m_sessionId":"s-host1-abc"}`
+	guest.relay(map[string]any{
+		"message": message, "messageProtocolVersion": "1.0.0", "messageSystemId": "XPSM",
+		"messageType": 1.0, "to": map[string]any{"globalPlayerId": "host1"},
+	})
+
+	got := frames(t, hostOut)
+	if len(got) != 1 || got[0]["action"] != "message" {
+		t.Fatalf("host received %#v, want one message frame", got)
+	}
+	body, _ := got[0]["body"].(map[string]any)
+	if body["message"] != message || body["messageSystemId"] != "XPSM" || body["messageType"] != 1.0 ||
+		body["messageProtocolVersion"] != "1.0.0" || body["from"] != "guest2" {
+		t.Errorf("relayed body changed: %#v", body)
+	}
+	if n := len(frames(t, guestOut)); n != 0 {
+		t.Errorf("the sender received %d frame(s) of its own message", n)
+	}
+}

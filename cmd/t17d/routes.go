@@ -101,6 +101,11 @@ var routes = map[string]route{
 		return map[string]any{"session": c.createSession(in)}
 	}},
 
+	// The game's own messages to other players, carried without being read.
+	"/messaging/send": {body: func(in map[string]any, c *client) map[string]any {
+		return c.relay(in)
+	}},
+
 	// An update is echoed to the other members as message 2000, or they never learn the chunk the
 	// host filled in — which is where the Photon region and session name live.
 	"/sessions/update": {body: func(in map[string]any, c *client) map[string]any {
