@@ -1,5 +1,29 @@
 # Changelog — t17
 
+## v0.9.0 — 2026-09-27
+
+**Real sessions, real invites, and server pushes.** Sessions were derived per connection and invite
+lists were always empty, so an invite had nowhere to land: the host created a session, waited ~13 s
+for a confirmation that could never arrive, and left. Now the server remembers sessions and invites
+and tells the other player about them.
+
+- `sessions.go` holds sessions and invites in memory; `conn.go` registers each live websocket against
+  its player so a push can reach it from whichever connection caused it.
+- `/sessions/send-invite` records the invite and pushes **message 2007** (SessionInviteReceived:
+  sessionId, inviter, type, supportedPlatforms) to the invitee, plus 2008 to the inviter.
+- `/sessions/accept-invite` puts the player in the stored session, pushes **2005** (PlayerJoined) to
+  everyone already there and **2010** (InviteAccepted) to the inviter, and answers with the session
+  carrying **both** players.
+- `/sessions/list-invites` answers from the store; `/sessions/update` pushes **2000** so the other
+  members learn the chunk the host filled in — which is where the Photon region and session name
+  live; leave/close/reject/withdraw push 2004/2001/2011/2009.
+
+The message numbers come from the session dispatcher's jump table (`0x6821a0`: it subtracts 2000 and
+allows twelve cases, the same ids the request builders use). The push envelope is what `0x694180`
+reads: `action: "message"` at the frame root, then `body` holding `messageSystemId` (a **string**),
+`messageType` (a number), `from`, `messageProtocolVersion`, and the payload under `message` — a body
+without an inner `message` is refused outright.
+
 ## v0.8.0 — 2026-09-27
 
 **An empty storage slot answers 404, not 200 with an empty value.**

@@ -62,10 +62,15 @@ func main() {
 }
 
 type server struct {
-	self  string
-	keys  *keyCache
-	names names
+	self     string
+	keys     *keyCache
+	names    names
+	sessions sessionStore
+	conns    connections
 }
+
+// conn is the live websocket of a player, or nil when they are not online.
+func (s *server) conn(id string) *conn { return s.conns.get(id) }
 
 // nameFor is the display name minted for a player at get-token, remembered because T17BE needs a
 // full name (with its '#') everywhere it reports one back.

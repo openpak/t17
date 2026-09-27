@@ -334,3 +334,41 @@ order `session`, `players`, `id`, `closedToNewPlayers`, `membersCanInviteOthers`
 directions is wrong and costs the session. Meanwhile
 `/player/get-platform-accounts` answers `accounts[]` of `{globalPlayerId, platformPlayerId}`
 (`0x67c730`) — the bridge from the console's friend list to T17BE players.
+
+## Server pushes (recovered 2026-09-27)
+
+The subsystem ids come from the request factory: every builder calls it with a system id and a
+message id, giving **1 Friend, 2 Session, 3 LiveData, 4 Storage, 7 Main, 8 Transport**, and ids
+1001-1011, 2000-2011, 3000-3002, 4000-4003, 5001-5005, 7000-7004.
+
+A push is a frame of its own:
+
+```json
+{"action":"message",
+ "body":{"messageSystemId":"2","messageType":2007,"messageProtocolVersion":"1",
+         "from":"<globalPlayerId>","message":{ ...payload... }}}
+```
+
+`0x694180` reads `body` at the frame root ("No Body - REQUIRED FOR MESSAGES!!!" without it),
+`messageSystemId` as a **string**, `messageType` as a number, `from` and `messageProtocolVersion`
+optionally, and the payload under `message` ("No inner Message Body for Message" without it). A
+`from` on the block list is dropped.
+
+The session system's dispatcher (`0x6821a0`) subtracts 2000 and allows twelve cases:
+
+| type | message | payload |
+|---|---|---|
+| 2000 | SessionUpdated | sessionId, chunk, maxPlayers, membersCanInviteOthers, closedToNewPlayers, supportedPlatforms |
+| 2001 | SessionClosed | sessionId |
+| 2002, 2003 | — | accepted and ignored |
+| 2004 | PlayerLeft | sessionId, globalPlayerId, reason |
+| 2005 | PlayerJoined | sessionId, player |
+| 2006 | NewOwner | sessionId, globalPlayerId |
+| 2007 | SessionInviteReceived | sessionId, inviter, type, supportedPlatforms |
+| 2008 | InviteSent | sessionId, invitee, type |
+| 2009 | InviteWithdrawn | sessionId, inviter, invitee |
+| 2010 | InviteAccepted | sessionId, invitee |
+| 2011 | InviteRejected | sessionId, invitee, type |
+
+The friend system's handlers are inlined the same way at `0x66a010`: FriendInvitation,
+FriendInvitationAccepted/Rejected/Withdrawn/Expired, FriendOnline, FriendOffline, FriendUnfriended.

@@ -35,12 +35,12 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 		log.Printf("[t17] socket: connection cannot be hijacked")
 		return false
 	}
-	conn, rw, err := hj.Hijack()
+	raw, rw, err := hj.Hijack()
 	if err != nil {
 		log.Printf("[t17] socket: hijack: %v", err)
 		return false
 	}
-	defer conn.Close()
+	defer raw.Close()
 
 	// The client's own request has never been read back, and it is the one part of this exchange
 	// we can see without instrumenting the console. Log it verbatim.
@@ -68,13 +68,20 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 
 	token := r.URL.Query().Get("token")
 
+	// Register this socket against its player so other players' actions can be pushed to it.
+	player := (&client{s: s, token: token}).playerID()
+	live := &conn{rw: rw}
+	s.conns.add(player, live)
+	defer s.conns.remove(player, live)
+	log.Printf("[t17] socket: %s is online", player)
+
 	// Nothing is sent unprompted. An empty `messages` array reaches the branch in
 	// __ParseJSONBlob that marks a pending request complete, so a "greeting" is not harmless, and
 	// the real contract is known now (docs/protocol.md) rather than something to probe for.
 
 	idle := 0
 	for {
-		_ = conn.SetReadDeadline(time.Now().Add(20 * time.Second))
+		_ = raw.SetReadDeadline(time.Now().Add(20 * time.Second))
 		op, payload, err := readFrame(rw)
 		if err != nil {
 			if ne, ok := err.(net.Error); ok && ne.Timeout() {
@@ -109,7 +116,7 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 			log.Printf("[t17] socket <<< op=%d len=%d %s", op, len(payload), payload)
 			if reply := s.reply(payload, token); reply != nil {
 				log.Printf("[t17] socket >>> %s", reply)
-				if err := writeText(rw, reply); err != nil {
+				if err := live.sendRaw(reply); err != nil {
 					log.Printf("[t17] socket: write failed (%v)", err)
 					return true
 				}

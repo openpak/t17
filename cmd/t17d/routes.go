@@ -92,26 +92,49 @@ var routes = map[string]route{
 		return map[string]any{"globalPlayerId": in["globalPlayerId"]}
 	}},
 
-	"/sessions/list-invites": {body: func(map[string]any, *client) map[string]any {
-		return map[string]any{"invites": []any{}}
+	// The invites this player has been sent, from the store. InternalResponse_SessionsListInvites
+	// reads `invites`, each carrying sessionId, inviter, invitee and supportedPlatforms.
+	"/sessions/list-invites": {body: func(_ map[string]any, c *client) map[string]any {
+		return map[string]any{"invites": c.listInvites()}
 	}},
-	// InternalResponse_SessionsCreate refuses an empty session type, a bad maxPlayers, a bad
-	// sessionId and a bad sessionOwner, each with its own log line, so all four must be real.
+
 	"/sessions/create": {body: func(in map[string]any, c *client) map[string]any {
-		return map[string]any{"session": c.session(in)}
+		return map[string]any{"session": c.createSession(in)}
 	}},
+
+	// An update is echoed to the other members as message 2000, or they never learn the chunk the
+	// host filled in — which is where the Photon region and session name live.
 	"/sessions/update": {body: func(in map[string]any, c *client) map[string]any {
-		return map[string]any{"session": c.session(in)}
+		return map[string]any{"session": c.updateSession(in)}
 	}},
+
+	// The invite is recorded against the invitee and pushed to them as message 2007
+	// (SessionInviteReceived: sessionId, inviter, type, supportedPlatforms). Without the push their
+	// UI never notices, and without the record their next list-invites is empty.
+	"/sessions/send-invite": {body: func(in map[string]any, c *client) map[string]any {
+		return c.sendInvite(in)
+	}},
+
+	// Accepting puts the player in the stored session and tells everyone already in it (2005
+	// PlayerJoined), plus the inviter (2010 InviteAccepted). The response carries the session with
+	// both players, which is what InternalResponse_SessionsAcceptInvite requires.
 	"/sessions/accept-invite": {body: func(in map[string]any, c *client) map[string]any {
-		return map[string]any{"session": c.session(in)}
+		return c.acceptInvite(in)
 	}},
-	"/sessions/leave":           {body: empty},
-	"/sessions/close":           {body: empty},
+
+	"/sessions/leave": {body: func(in map[string]any, c *client) map[string]any {
+		return c.leaveSession(in)
+	}},
+	"/sessions/close": {body: func(in map[string]any, c *client) map[string]any {
+		return c.closeSession(in)
+	}},
+	"/sessions/reject-invite": {body: func(in map[string]any, c *client) map[string]any {
+		return c.rejectInvite(in)
+	}},
+	"/sessions/withdraw-invite": {body: func(in map[string]any, c *client) map[string]any {
+		return c.withdrawInvite(in)
+	}},
 	"/sessions/kick-player":     {body: empty},
-	"/sessions/send-invite":     {body: empty},
-	"/sessions/withdraw-invite": {body: empty},
-	"/sessions/reject-invite":   {body: empty},
 	"/sessions/grant-ownership": {body: empty},
 
 	// InternalResponse_Get logs "Missing Response Body --> Failed" without one. The chunk is the
