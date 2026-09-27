@@ -146,14 +146,12 @@ var routes = map[string]route{
 	"/live/put":   {body: empty},
 	"/live/patch": {body: empty},
 
-	// 404, not 200 with an empty value. OnDownloadRecentlyMetPlayersCallback (0x4b73440) branches on
-	// the request's error code: 5 is "nothing stored", handled by carrying on with an empty list,
-	// while 0 means the body holds real data and hands it to the parser. 404 is what the response
-	// parser turns into error 5, so an empty slot must answer 404 -- a 200 with `value: ""` sends
-	// the game down the has-data path with nothing in it.
-	"/storage/get":          {body: func(map[string]any, *client) map[string]any { return map[string]any{} }, status: 404},
-	"/storage/put":          {body: empty},
-	"/storage/delete":       {body: empty},
+	// Real storage: what the game puts is what it gets back (storage.go). An unwritten slot answers
+	// 200 with a well-formed empty object rather than 404 -- see emptySlot for why the 404 this used
+	// to send cost every first launch its T17 connection.
+	"/storage/get":          {body: func(in map[string]any, c *client) map[string]any { return c.storageGet(in) }},
+	"/storage/put":          {body: func(in map[string]any, c *client) map[string]any { return c.storagePut(in) }},
+	"/storage/delete":       {body: func(in map[string]any, c *client) map[string]any { return c.storageDelete(in) }},
 	"/storage/get-file-url": {body: func(map[string]any, *client) map[string]any { return map[string]any{"url": ""} }},
 
 	"/service/send-report-sns":     {body: empty},

@@ -66,6 +66,7 @@ type server struct {
 	keys     *keyCache
 	names    names
 	sessions sessionStore
+	storage  storageStore
 	conns    connections
 }
 

@@ -181,18 +181,53 @@ func TestRoutesAnswerWhatTheHandlersRequire(t *testing.T) {
 		t.Error("live/get must carry a chunk — the handler logs 'Missing Response Body'")
 	}
 
-	// An empty storage slot answers 404: the client maps it to error 5, its "nothing stored" path,
-	// where a 200 with an empty value sends it down the has-data path with nothing in it.
+	// An unwritten storage slot answers 200 with a well-formed empty object, NOT 404: the 404 this
+	// used to send is what cost Moving Out 2 its T17 socket on every first launch (see emptySlot).
 	{
 		out := s.reply([]byte(`{"action":"/storage/get","headers":{"request-id":9},"body":{"slot":"RecentlyMetPlayers_v1"}}`), tok)
 		var m struct {
 			StatusCode int `json:"statusCode"`
+			Body       struct {
+				Value string `json:"value"`
+			} `json:"body"`
 		}
 		if err := json.Unmarshal(out, &m); err != nil {
 			t.Fatal(err)
 		}
-		if m.StatusCode != 404 {
-			t.Errorf("storage/get statusCode = %d, want 404 for an empty slot", m.StatusCode)
+		if m.StatusCode != 200 {
+			t.Errorf("storage/get statusCode = %d, want 200 for an unwritten slot", m.StatusCode)
+		}
+		if m.Body.Value != emptySlot {
+			t.Errorf("storage/get value = %q, want the empty object %q", m.Body.Value, emptySlot)
+		}
+	}
+
+	// And what the game stores is what it reads back: the slot is its own data, held verbatim.
+	{
+		s.reply([]byte(`{"action":"/storage/put","headers":{"request-id":10},`+
+			`"body":{"slot":"RecentlyMetPlayers_v1","value":"eyJhIjoxfQ=="}}`), tok)
+
+		out := s.reply([]byte(`{"action":"/storage/get","headers":{"request-id":11},"body":{"slot":"RecentlyMetPlayers_v1"}}`), tok)
+		var m struct {
+			StatusCode int `json:"statusCode"`
+			Body       struct {
+				Value string `json:"value"`
+			} `json:"body"`
+		}
+		if err := json.Unmarshal(out, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m.StatusCode != 200 || m.Body.Value != "eyJhIjoxfQ==" {
+			t.Errorf("storage round trip = %d %q, want 200 and the value put", m.StatusCode, m.Body.Value)
+		}
+
+		// A different slot is a different blob, not the one just written.
+		out = s.reply([]byte(`{"action":"/storage/get","headers":{"request-id":12},"body":{"slot":"SomethingElse"}}`), tok)
+		if err := json.Unmarshal(out, &m); err != nil {
+			t.Fatal(err)
+		}
+		if m.Body.Value != emptySlot {
+			t.Errorf("other slot value = %q, want the empty object", m.Body.Value)
 		}
 	}
 

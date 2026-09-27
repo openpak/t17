@@ -1,5 +1,22 @@
 # Changelog — t17
 
+## v0.10.0 — 2026-09-27
+
+**Player storage is real, and an unwritten slot is not a 404.** `/storage/put` remembers a value and
+`/storage/get` gives it back, keyed by dataRole + gameId + globalPlayerId + slot. The blob is the
+game's own (base64 of its LitJSON); we hold it verbatim and never interpret it.
+
+The 404 an empty slot used to answer is what cost Moving Out 2 its T17 connection on **every first
+launch**: measured in its own trace, the game read the 404 and disposed of the socket 100 ms later,
+putting up "An error has occurred connecting to T17 services." The launch after — whose T17BE init is
+already past the storage step — worked, which is the "only ever works the second time" everyone kept
+hitting. `OnDownloadRecentlyMetPlayersCallback` does treat 404 as "nothing stored", which is why the
+404 looked right, but the native `T17BE_StorageSystem` boot fetch does not agree.
+
+An unwritten slot now answers 200 with base64 of `{}` — a well-formed empty object for the game's own
+parser. The build before last answered 200 with `value: ""`, which is empty rather than well-formed and
+sent the game down its has-data path with nothing in it; a valid empty object is neither that nor a 404.
+
 ## v0.9.1 — 2026-09-27
 
 **Session ids are unique per session, not per player.** The client names its Photon room after the
