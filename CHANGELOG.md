@@ -1,5 +1,17 @@
 # Changelog — t17
 
+## v0.11.1 — 2026-09-27
+
+**A person in a session push is a whole player, not an id.** With the relay in place the join got
+one step further: the host answered the joiner's announcement with `/sessions/send-invite`, we
+pushed `SessionInviteReceived` (2007) to the Switch — and the Switch never accepted it. The session
+dispatcher (`0x6821a0`) runs `inviter` through the same player parser a session's `players` use
+(`0x696370`) and drops the message on failure ("Cannot parst Inviter JSON"); we sent a bare id.
+
+Fixed wherever that dispatcher reads a person: `inviter` in 2007 and 2009, `invitee` in 2008, 2010
+and 2011, the player's fields at the payload root of `SessionPlayerJoined` (2005), and `inviter` in
+the `/sessions/list-invites` reply (`0x686650`).
+
 ## v0.11.0 — 2026-09-27
 
 **`/messaging/send` is relayed.** With hosting fixed, a Switch that accepted an invite failed with

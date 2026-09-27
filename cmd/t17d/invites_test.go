@@ -87,7 +87,10 @@ func TestInviteReachesTheOtherPlayer(t *testing.T) {
 	if !ok {
 		t.Fatal("the push has no inner `message` — the client refuses that")
 	}
-	if inner["sessionId"] != created || inner["inviter"] != "host1" {
+	// The inviter is a whole player: the client runs it through its player parser and drops the
+	// invite when that fails, which is what a bare id did.
+	inviter, _ := inner["inviter"].(map[string]any)
+	if inner["sessionId"] != created || inviter["globalPlayerId"] != "host1" || inviter["displayName"] != "tobagin#7016" {
 		t.Errorf("push payload wrong: %#v", inner)
 	}
 
@@ -95,6 +98,9 @@ func TestInviteReachesTheOtherPlayer(t *testing.T) {
 	list := guest.listInvites()
 	if len(list) != 1 {
 		t.Fatalf("guest sees %d invites, want 1", len(list))
+	}
+	if listed, _ := list[0].(map[string]any)["inviter"].(map[string]any); listed["globalPlayerId"] != "host1" {
+		t.Errorf("listed inviter is not a player: %#v", list[0])
 	}
 
 	// 3. accepting resolves to the same session, with both players
