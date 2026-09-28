@@ -1,5 +1,19 @@
 # Changelog — t17
 
+## v0.11.3 — 2026-09-28
+
+**A player's platform goes inside `liveData`.** The invite flow now completes — request, invite,
+accept — and the joiner then waited on "joining crew" for ten seconds and left. It was waiting for
+the host's join confirmation, which the host sends from its player-joined handler. Read from the
+host: the player-joined event did fire, and its first listener threw
+`ArgumentNullException: Value cannot be null. Parameter name: key` in
+`CrossPlayAnalyticsService.OnPlayerJoined` → `IncreaseTrackingReferenceForPlatform(platform)`, so the
+session manager's listener behind it never ran.
+
+The platform was null because the player parser (`0x696370`) reads `platformPlayerId`, `platformId`,
+`gameId`, `deviceId` and `chunk` from a `liveData` object inside the player, and we sent them at the
+player's own level. Every player object now carries `liveData`.
+
 ## v0.11.2 — 2026-09-27
 
 **Session pushes are addressed to `SESN`, not `2`.** Read from the joiner itself this time: its

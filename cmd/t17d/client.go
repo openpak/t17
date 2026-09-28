@@ -110,6 +110,21 @@ func (c *client) playerOf(id string) map[string]any {
 		name = id + "#" + fourDigits(platformID(id))
 	}
 
+	// Where the player is playing from lives INSIDE `liveData`: the parser looks that object up and
+	// reads platformPlayerId, platformId, gameId, deviceId and chunk from it, not from the player's
+	// own level. Sent only at the top, they left every player with no platform -- and on a host,
+	// the first listener of its player-joined event (CrossPlayAnalyticsService.OnPlayerJoined)
+	// threw ArgumentNullException on that null platform, so the session manager behind it never
+	// ran, never sent the joiner its confirmation, and the joiner waited on "joining crew" until
+	// it gave up. The top-level copies stay; nothing reads them and they cost nothing.
+	live := map[string]any{
+		"platformPlayerId": platformID(id),
+		"platformId":       "nintendo",
+		"deviceId":         "nintendo-switch",
+		"gameId":           "ProjectJourney",
+		"chunk":            "{}",
+	}
+
 	return map[string]any{
 		"globalPlayerId":   id,
 		"platformPlayerId": platformID(id),
@@ -119,6 +134,7 @@ func (c *client) playerOf(id string) map[string]any {
 		"gameId":           "ProjectJourney",
 		"connected":        c.s.conn(id) != nil,
 		"chunk":            "{}",
+		"liveData":         live,
 		"linkedAccounts":   []any{},
 	}
 }
