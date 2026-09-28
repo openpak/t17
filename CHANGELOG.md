@@ -1,5 +1,13 @@
 # Changelog — t17
 
+## v0.11.4 — 2026-09-28
+
+**A player's Nintendo account goes in `linkedAccounts`.** Two players are in a session together for
+the first time, and the host drew the joiner with no avatar. Read from the host's own trace: it asked
+the console's friends service for the profile of account `0000000000000000`. The game takes a session
+player's platform account from `linkedAccounts` (`{platformId, platformPlayerId}`) and nowhere else,
+and we sent that list empty.
+
 ## v0.11.3 — 2026-09-28
 
 **A player's platform goes inside `liveData`.** The invite flow now completes — request, invite,

@@ -125,6 +125,13 @@ func (c *client) playerOf(id string) map[string]any {
 		"chunk":            "{}",
 	}
 
+	// The account a player is known by on their own platform comes from `linkedAccounts`, a list of
+	// {platformId, platformPlayerId}. It is the only place the game's session player takes one from
+	// (SessionPlayer.linkedAccountPlatformPlayerID), and it is what the game asks the console's
+	// friends service about to show who joined. Sent empty, the host asked for the profile of
+	// account 0000000000000000 and drew the joining player with no avatar.
+	linked := []any{map[string]any{"platformId": "nintendo", "platformPlayerId": platformID(id)}}
+
 	return map[string]any{
 		"globalPlayerId":   id,
 		"platformPlayerId": platformID(id),
@@ -135,7 +142,7 @@ func (c *client) playerOf(id string) map[string]any {
 		"connected":        c.s.conn(id) != nil,
 		"chunk":            "{}",
 		"liveData":         live,
-		"linkedAccounts":   []any{},
+		"linkedAccounts":   linked,
 	}
 }
 

@@ -50,6 +50,10 @@ func TestGlobalIDIsAGuidAndRoundTrips(t *testing.T) {
 		t.Fatalf("platformPlayerId = %v, want %q", got, account)
 	}
 	// The platform is read from inside liveData; without it a host throws on the player's arrival.
+	linked, _ := c.playerOf(id)["linkedAccounts"].([]any)
+	if len(linked) != 1 || linked[0].(map[string]any)["platformPlayerId"] != account {
+		t.Fatalf("linkedAccounts = %#v, want the Nintendo account in it", linked)
+	}
 	live, _ := c.playerOf(id)["liveData"].(map[string]any)
 	if live["platformId"] != "nintendo" || live["platformPlayerId"] != account {
 		t.Fatalf("liveData = %#v, want the platform and the account id in it", live)
