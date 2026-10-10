@@ -1,5 +1,16 @@
 # Changelog — t17
 
+## v0.11.5 — 2026-10-10
+
+**The log carries no personal data.** Player ids, display names, session ids, client addresses and
+websocket frame text are gone from every log line. Where two lines have to be matched up they carry
+a `~xxxxxx` tag (a keyed hash, new for each process start). The HTTP server's own error log has addresses scrubbed. Error text drops the addresses and URLs
+that net errors spell out, and request paths and unknown routes keep their shape but tag any segment
+that is not a plain route word. The websocket frame dump is off; `T17_TRACE_BODIES=1` turns it back on
+for a bench run (never set it in production). Behaviour is unchanged; `TestLogsCarryNoPersonalData`
+drives sign-in, two sockets, sessions, invites and relays and fails if a sentinel id, token, name,
+address or query reaches the log.
+
 ## v0.11.4 — 2026-09-28
 
 **A player's Nintendo account goes in `linkedAccounts`.** Two players are in a session together for

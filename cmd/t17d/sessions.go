@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"sync"
+
+	"openpak/t17/redact"
 )
 
 // Sessions and invites, held in memory, plus the pushes that tell the other player about them.
@@ -176,11 +178,11 @@ func (s *server) push(to, from string, messageType int, payload map[string]any) 
 		},
 	}
 	if err := c.sendJSON(frame); err != nil {
-		log.Printf("[t17] push %d to %s failed: %v", messageType, to, err)
+		log.Printf("[t17] push %d to %s failed: %v", messageType, redact.Tag(to), redact.Err(err))
 
 		return
 	}
-	log.Printf("[t17] push %d to %s from %s", messageType, to, from)
+	log.Printf("[t17] push %d to %s from %s", messageType, redact.Tag(to), redact.Tag(from))
 }
 
 // pushAll sends to everyone in the list except `except`.
@@ -244,16 +246,16 @@ func (c *client) relay(in map[string]any) map[string]any {
 		skip[target] = true
 		peer := c.s.conn(target)
 		if peer == nil {
-			log.Printf("[t17] relay %v/%v from %s: %s is not online", in["messageSystemId"], in["messageType"], from, target)
+			log.Printf("[t17] relay %v/%v from %s: %s is not online", in["messageSystemId"], in["messageType"], redact.Tag(from), redact.Tag(target))
 
 			continue
 		}
 		if err := peer.sendJSON(map[string]any{"action": "message", "body": body}); err != nil {
-			log.Printf("[t17] relay to %s failed: %v", target, err)
+			log.Printf("[t17] relay to %s failed: %v", redact.Tag(target), redact.Err(err))
 
 			continue
 		}
-		log.Printf("[t17] relay %v/%v to %s from %s", in["messageSystemId"], in["messageType"], target, from)
+		log.Printf("[t17] relay %v/%v to %s from %s", in["messageSystemId"], in["messageType"], redact.Tag(target), redact.Tag(from))
 	}
 
 	return map[string]any{}

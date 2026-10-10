@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"openpak/t17/redact"
 )
 
 // getToken is the whole of T17BE authentication: one POST carrying the console's own BAAS
@@ -45,7 +47,7 @@ func (s *server) getToken(w http.ResponseWriter, r *http.Request) {
 
 	claims, err := s.keys.verify(in.Token)
 	if err != nil {
-		log.Printf("[t17] get-token: id_token rejected: %v", err)
+		log.Printf("[t17] get-token: id_token rejected: %v", redact.Err(err))
 		writeJSON(w, 401, map[string]any{"error": "invalid token"})
 		return
 	}
@@ -79,7 +81,7 @@ func (s *server) getToken(w http.ResponseWriter, r *http.Request) {
 	// trip it.
 	const ttl = time.Hour
 	const t17MaxAuthExpirySeconds = 10800
-	log.Printf("[t17] get-token: game=%s player=%s (%s) platform=%s", in.GameID, name, id, in.PlatformID)
+	log.Printf("[t17] get-token: game=%s player=%s platform=%s", in.GameID, redact.Tag(id), in.PlatformID)
 	// Exactly the twelve fields of the managed response class, with the types it declares:
 	// JsonUtility.FromJsonOverwrite ignores unknown keys and defaults missing ones, but THROWS on
 	// a type mismatch and takes the whole auth step down silently. `blockList` is an array here

@@ -1,6 +1,10 @@
 package main
 
-import "log"
+import (
+	"log"
+
+	"openpak/t17/redact"
+)
 
 // The invite and membership operations, each of which has to tell the other players about itself.
 // The message numbers are the session system's, from the dispatcher's jump table at 0x6821a0.
@@ -44,7 +48,7 @@ func (c *client) sendInvite(in map[string]any) map[string]any {
 	inviter := c.playerID()
 	s := c.s.sessions.get(sessionID)
 	if s == nil || invitee == "" {
-		log.Printf("[t17] send-invite: no session %q or no invitee (%q)", sessionID, invitee)
+		log.Printf("[t17] send-invite: no session %s or no invitee (%s)", redact.Tag(sessionID), redact.Tag(invitee))
 
 		return map[string]any{}
 	}
@@ -76,7 +80,7 @@ func (c *client) acceptInvite(in map[string]any) map[string]any {
 	}
 	s, existing := c.s.sessions.join(sessionID, me)
 	if s == nil {
-		log.Printf("[t17] accept-invite: %s has no session %q (invite found: %v)", me, sessionID, had)
+		log.Printf("[t17] accept-invite: %s has no session %s (invite found: %v)", redact.Tag(me), redact.Tag(sessionID), had)
 
 		return map[string]any{}
 	}

@@ -21,6 +21,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"openpak/t17/redact"
 )
 
 var (
@@ -53,12 +55,12 @@ func main() {
 			writeJSON(w, 200, map[string]any{"status": "ok"})
 		})
 		log.Printf("[t17] health on %s", *healthAddr)
-		log.Fatal(http.ListenAndServe(*healthAddr, h))
+		log.Fatal((&http.Server{Addr: *healthAddr, Handler: h, ErrorLog: redact.ErrorLog()}).ListenAndServe())
 	}()
 
 	log.Printf("[t17] serving %s on %s (directory -> game.%s / xplay.%s)",
 		s.self, *addr, s.self, s.self)
-	log.Fatal(http.ListenAndServe(*addr, mux))
+	log.Fatal((&http.Server{Addr: *addr, Handler: mux, ErrorLog: redact.ErrorLog()}).ListenAndServe())
 }
 
 type server struct {
@@ -92,7 +94,7 @@ func (s *server) route(w http.ResponseWriter, r *http.Request) {
 	case s.socket(w, r):
 		// upgraded and handled for the life of the connection
 	default:
-		log.Printf("[t17] !! unhandled %s %s%s", r.Method, host, r.URL.Path)
+		log.Printf("[t17] !! unhandled %s %s%s", r.Method, host, redact.Path(r.URL.Path))
 		writeJSON(w, 404, map[string]any{"error": "not found"})
 	}
 }

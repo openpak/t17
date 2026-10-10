@@ -10,9 +10,16 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+
+	"openpak/t17/redact"
 )
+
+// traceBodies turns the websocket frame dumps back on. Frames carry player ids, names, session
+// ids and chat-like free text, so they are off unless T17_TRACE_BODIES=1 (never set in prod).
+var traceBodies = os.Getenv("T17_TRACE_BODIES") == "1"
 
 // The T17BE websocket: everything after get-token — /player/*, /sessions/*, /friends/*,
 // /storage/*, /live/* — is JSON over this one socket, each message carrying a `headers` object
@@ -37,7 +44,7 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 	}
 	raw, rw, err := hj.Hijack()
 	if err != nil {
-		log.Printf("[t17] socket: hijack: %v", err)
+		log.Printf("[t17] socket: hijack: %v", redact.Err(err))
 		return false
 	}
 	defer raw.Close()
@@ -64,7 +71,7 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 	}
 	_, _ = rw.WriteString(resp + "\r\n")
 	_ = rw.Flush()
-	log.Printf("[t17] socket: open %s%s from %s", r.Host, r.URL.Path, r.RemoteAddr)
+	log.Printf("[t17] socket: open %s%s", r.Host, redact.Path(r.URL.Path))
 
 	token := r.URL.Query().Get("token")
 
@@ -73,7 +80,7 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 	live := &conn{rw: rw}
 	s.conns.add(player, live)
 	defer s.conns.remove(player, live)
-	log.Printf("[t17] socket: %s is online", player)
+	log.Printf("[t17] socket: %s is online", redact.Tag(player))
 
 	// Nothing is sent unprompted. An empty `messages` array reaches the branch in
 	// __ParseJSONBlob that marks a pending request complete, so a "greeting" is not harmless, and
@@ -92,13 +99,13 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 				// zero. A server that hangs up on an idle client would break the working case.
 				log.Printf("[t17] socket: idle 20s, pinging (%d)", idle)
 				if _, err := rw.Write([]byte{0x89, 0}); err != nil { // ping, no payload
-					log.Printf("[t17] socket: ping failed (%v)", err)
+					log.Printf("[t17] socket: ping failed (%v)", redact.Err(err))
 					return true
 				}
 				_ = rw.Flush()
 				continue
 			}
-			log.Printf("[t17] socket: closed (%v)", err)
+			log.Printf("[t17] socket: closed (%v)", redact.Err(err))
 			return true
 		}
 		switch op {
@@ -113,11 +120,17 @@ func (s *server) socket(w http.ResponseWriter, r *http.Request) bool {
 			log.Printf("[t17] socket: pong — the client's reader is alive and it is waiting on us")
 		default:
 			idle = 0
-			log.Printf("[t17] socket <<< op=%d len=%d %s", op, len(payload), payload)
+			log.Printf("[t17] socket <<< op=%d len=%d", op, len(payload))
+			if traceBodies {
+				log.Printf("[t17] socket <<< %s", payload)
+			}
 			if reply := s.reply(payload, token); reply != nil {
-				log.Printf("[t17] socket >>> %s", reply)
+				log.Printf("[t17] socket >>> len=%d", len(reply))
+				if traceBodies {
+					log.Printf("[t17] socket >>> %s", reply)
+				}
 				if err := live.sendRaw(reply); err != nil {
-					log.Printf("[t17] socket: write failed (%v)", err)
+					log.Printf("[t17] socket: write failed (%v)", redact.Err(err))
 					return true
 				}
 			}
@@ -153,7 +166,7 @@ func (s *server) reply(frame []byte, token string) []byte {
 	if id, ok := in.Headers["request-id"]; ok {
 		headers["request-id"] = id
 	} else {
-		log.Printf("[t17] socket: request %q carries no request-id — the client will ignore any reply", in.Action)
+		log.Printf("[t17] socket: request %s carries no request-id — the client will ignore any reply", redact.Path(in.Action))
 	}
 
 	// Dispatch through the recovered route table (routes.go). An action we do not know still gets
@@ -167,7 +180,7 @@ func (s *server) reply(frame []byte, token string) []byte {
 			status = r.status
 		}
 	} else {
-		log.Printf("[t17] socket: no route for %q — answering 200 with an empty body", in.Action)
+		log.Printf("[t17] socket: no route for %s — answering 200 with an empty body", redact.Path(in.Action))
 	}
 
 	msg := map[string]any{
