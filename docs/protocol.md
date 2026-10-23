@@ -1,5 +1,13 @@
 # T17BE — the protocol, as recovered
 
+> **Current Switch client (2026-10-13): Harbor**, at
+> `~/REPOS/Openpak/emulators/harbor`. Harbor is an independent
+> OpenPak project based on Eden. Citron, Ryujinx (desktop and Android), and
+> the former OpenPak Eden checkouts have been removed. References to those
+> forks below record historical evidence only: do not run their commands,
+> reinstall them, or select them for current work. Use Harbor's README and
+> current handoff for builds and testing; old results do not establish Harbor parity.
+
 Read out of **Moving Out 2** (`010065D018172000`, update v327680 = 1.3.315) on 2026-09-25, partly
 from captured traffic and partly by disassembly. Addresses are that build's. The research trail,
 including the tooling that made the C# readable, is in `nx-baas/docs/t17-backend.md`.
