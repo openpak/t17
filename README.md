@@ -11,7 +11,7 @@ serves all three tiers a T17BE title asks for, dispatching on hostname:
 
 Plain HTTP on **22630** inside the pod network (health on **22631**); Traefik terminates the
 guest's TLS for the three names, the same arrangement as the Among Us front and
-[`servers/battlenet`](../battlenet).
+[`platforms/switch/games/battlenet`](../battlenet).
 
 ## Status: the gate is open, the session protocol is not built
 

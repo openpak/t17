@@ -8,7 +8,7 @@
 //	game.<host>/socket?token=…         one websocket carrying every other operation
 //
 // Plain HTTP inside the pod network; Traefik terminates the guest's TLS for the three names, the
-// same arrangement as the Among Us front and servers/battlenet.
+// same arrangement as the Among Us front and platforms/switch/games/battlenet.
 //
 // The protocol was recovered from Moving Out 2 (010065D018172000 v1.3.315) — see
 // docs/protocol.md, and keep that file in step with this code.
