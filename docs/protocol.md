@@ -382,3 +382,23 @@ The session system's dispatcher (`0x6821a0`) subtracts 2000 and allows twelve ca
 
 The friend system's handlers are inlined the same way at `0x66a010`: FriendInvitation,
 FriendInvitationAccepted/Rejected/Withdrawn/Expired, FriendOnline, FriendOffline, FriendUnfriended.
+
+## From the previous README
+
+The service a Team17 Switch title reaches when a console is redirected to OpenPak. One process
+serves all three tiers a T17BE title asks for, dispatching on hostname:
+
+| Host | What it answers |
+| --- | --- |
+| `directory.t17service.com` | the addressing — where the game and crossplay tiers live |
+| `xplay.t17service.com` | `POST /prod/auth/get-token`, from the console's own BAAS id_token |
+| `game.t17service.com` | `/socket` — one websocket carrying every other operation |
+
+### Two things that will cost you an evening
+
+- **`displayName` must contain `#`.** T17BE splits it to derive a short name and *fails the whole
+  init* when the separator is missing, through a path with no error string. The symptom is
+  authentication succeeding and then silence — no socket, no diagnostic.
+- **There are two JSON contracts.** The native SDK's field list describes the string the game's own
+  C# builds for it, not this service's HTTP reply. Match the reply to the managed class; matching
+  it to the native list is what makes `blockList` look like a string when it must be an array.

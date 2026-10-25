@@ -1,53 +1,45 @@
-# t17 — OpenPak's Team17 backend (T17BE)
+# Team17
 
-The service a Team17 Switch title reaches when a console is redirected to OpenPak. One process
-serves all three tiers a T17BE title asks for, dispatching on hostname:
+OpenPak's Team17 Server.
 
-| Host | What it answers |
+| | |
 | --- | --- |
-| `directory.t17service.com` | the addressing — where the game and crossplay tiers live |
-| `xplay.t17service.com` | `POST /prod/auth/get-token`, from the console's own BAAS id_token |
-| `game.t17service.com` | `/socket` — one websocket carrying every other operation |
+| Network | Nintendo Switch |
+| Protocol | T17BE: HTTP and one JSON websocket |
+| Image | `ghcr.io/openpak/t17` |
+| Licence | AGPL-3.0 |
 
-Plain HTTP on **22630** inside the pod network (health on **22631**); Traefik terminates the
-guest's TLS for the three names, the same arrangement as the Among Us front and
-[`platforms/switch/games/battlenet`](../battlenet).
+## Titles
 
-## Status: the gate is open, the session protocol is not built
+| Game | Title ID | Module |
+| --- | --- | --- |
+| [Moving Out 2](https://openpak.org/titles#t-122) | `010065D018172000` | `cmd/t17d` |
 
-Moving Out 2 (`010065D018172000`) authenticates against this service and opens its websocket.
-It is **not playable**: nothing above the socket is implemented yet, so the game connects and
-waits. The routes still to build are `/websocket/go-online`, `/player/*`, `/sessions/*`,
-`/friends/*`, `/storage/*` and `/live/*` — see [`docs/protocol.md`](docs/protocol.md), which is
-the recovered contract and should stay in step with the code.
+One process serves every title in this table; its handlers are in `cmd/t17d`.
 
-Beyond that, Moving Out 2 is a **Photon Fusion** title: once the session layer works it hands off
-to [`servers/photon`](../photon). The Fusion AppId is not baked into the game, so it most likely
-arrives from `/live/get` — which would mean OpenPak chooses it.
+## What it serves
 
-## Why the console's token is ours to verify
+| Host | What | Served by |
+| --- | --- | --- |
+| `directory.t17service.com` | the addressing: where the game and crossplay tiers live | `t17d` |
+| `xplay.t17service.com` | `POST /prod/auth/get-token`, from the console's own BAAS id_token | `t17d` |
+| `game.t17service.com` | `/socket`: one websocket carrying every other operation | `t17d` |
 
-`get-token` carries a BAAS `id_token` that **OpenPak signed**, because OpenPak is the BAAS the
-console logged into. So this service verifies its own signature (`-jwks-url`, RS256 against the
-BAAS JWKS) instead of asking Nintendo to vouch for it — the same reasoning as
-[`servers/demonware`](../demonware). It refuses rather than guessing when the keys cannot be
-fetched: that token is what names the player.
-
-## Two things that will cost you an evening
-
-- **`displayName` must contain `#`.** T17BE splits it to derive a short name and *fails the whole
-  init* when the separator is missing, through a path with no error string. The symptom is
-  authentication succeeding and then silence — no socket, no diagnostic.
-- **There are two JSON contracts.** The native SDK's field list describes the string the game's own
-  C# builds for it, not this service's HTTP reply. Match the reply to the managed class; matching
-  it to the native list is what makes `blockList` look like a string when it must be an array.
-
-## Build and test
+## Run
 
 ```sh
 go build ./...
 go test ./...
 ```
 
-A `v*.*.*` tag publishes `ghcr.io/openpak/t17:latest` and deploys, like every other OpenPak
-service.
+## Docs
+
+- [Protocol facts](docs/protocol.md)
+- [Evidence](docs/evidence.md)
+- [Deploy runbook](docs/deploy.md)
+- [Notes](docs/notes.md)
+- [Ports](docs/ports.md)
+
+## Licence
+
+AGPL-3.0. See [LICENSE](LICENSE).
