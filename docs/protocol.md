@@ -402,3 +402,16 @@ serves all three tiers a T17BE title asks for, dispatching on hostname:
 - **There are two JSON contracts.** The native SDK's field list describes the string the game's own
   C# builds for it, not this service's HTTP reply. Match the reply to the managed class; matching
   it to the native list is what makes `blockList` look like a string when it must be an array.
+
+## Routes and token
+
+Moving Out 2 (`010065D018172000`) authenticates against this service and opens its websocket. The
+routes above the socket are `/websocket/go-online`, `/player/*`, `/sessions/*`, `/friends/*`,
+`/storage/*` and `/live/*`. Moving Out 2 is a Photon Fusion title: once the session layer works it
+hands off to [`photon`](../../photon). The Fusion AppId is not baked into the game, so it most
+likely arrives from `/live/get`, which would mean OpenPak chooses it.
+
+`get-token` carries a BAAS `id_token` that OpenPak signed, because OpenPak is the BAAS the console
+logged into. The service therefore verifies its own signature (`-jwks-url`, RS256 against the BAAS
+JWKS) instead of asking Nintendo, as `demonware` does. It refuses rather than guessing when the
+keys cannot be fetched: that token is what names the player.

@@ -36,7 +36,6 @@ go test ./...
 
 - [Protocol facts](docs/protocol.md)
 - [Deploy runbook](docs/deploy.md)
-- [Notes](docs/notes.md)
 - [Ports](docs/ports.md)
 
 ## Licence
