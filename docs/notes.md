@@ -1,10 +1,9 @@
 # Notes: t17
 
-## Status: the gate is open, the session protocol is not built
+## Routes
 
 Moving Out 2 (`010065D018172000`) authenticates against this service and opens its websocket.
-It is **not playable**: nothing above the socket is implemented yet, so the game connects and
-waits. The routes still to build are `/websocket/go-online`, `/player/*`, `/sessions/*`,
+The routes above the socket are `/websocket/go-online`, `/player/*`, `/sessions/*`,
 `/friends/*`, `/storage/*` and `/live/*` — see [`docs/protocol.md`](protocol.md), which is
 the recovered contract and should stay in step with the code.
 

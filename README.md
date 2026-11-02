@@ -35,7 +35,6 @@ go test ./...
 ## Docs
 
 - [Protocol facts](docs/protocol.md)
-- [Evidence](docs/evidence.md)
 - [Deploy runbook](docs/deploy.md)
 - [Notes](docs/notes.md)
 - [Ports](docs/ports.md)
