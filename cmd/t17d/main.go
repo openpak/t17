@@ -15,12 +15,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"log"
 	"net/http"
 	"os"
 	"strings"
+	"time"
+
+	emit "github.com/openpak/rewards-emit"
 
 	"openpak/t17/redact"
 )
@@ -46,6 +50,7 @@ func envOr(k, def string) string {
 func main() {
 	flag.Parse()
 	s := &server{self: *selfHost, keys: newKeyCache(*jwksURL, *jwksHost)}
+	s.watchSessions(context.Background(), emit.FromEnv("t17"), 20*time.Second)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.route)
@@ -67,6 +72,7 @@ type server struct {
 	self     string
 	keys     *keyCache
 	names    names
+	accounts names // global player id -> BAAS user id (the id_token subject)
 	sessions sessionStore
 	storage  storageStore
 	conns    connections

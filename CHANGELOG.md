@@ -8,6 +8,13 @@
 > reinstall them, or select them for current work. Use Harbor's README and
 > current handoff for builds and testing; old results do not establish Harbor parity.
 
+## v0.11.6 — 2026-11-03
+
+**Rewards sessions.** A player now earns a Moving Out 2 session (`game_sessions.moving-out-2`) after three
+unbroken minutes in a T17BE session with another connected player. Join and leave come from the session
+store, only members whose websocket is live count, and the player is the BAAS user id from `get-token`.
+Off unless `REWARDS_EVENTS_URL` and `REWARDS_EVENTS_KEY` are set. The image build now downloads modules.
+
 ## v0.11.5 — 2026-10-10
 
 **The log carries no personal data.** Player ids, display names, session ids, client addresses and

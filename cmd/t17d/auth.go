@@ -56,6 +56,7 @@ func (s *server) getToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 401, map[string]any{"error": "token names no subject"})
 		return
 	}
+	account := id
 	// From here on the player is known by their global id, which the game parses as a GUID.
 	id = globalID(id)
 
@@ -88,6 +89,7 @@ func (s *server) getToken(w http.ResponseWriter, r *http.Request) {
 	// even though the native SDK wants a stringified chunk — the native side never sees this
 	// JSON, the C# rebuilds one for it.
 	s.names.set(id, name)
+	s.accounts.set(id, account) // the BAAS user id, for rewards sessions
 
 	writeJSON(w, 200, map[string]any{
 		"websocketUrl":     "wss://game." + s.self + "/socket",
