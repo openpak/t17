@@ -8,6 +8,15 @@
 > reinstall them, or select them for current work. Use Harbor's README and
 > current handoff for builds and testing; old results do not establish Harbor parity.
 
+## v0.11.7 — 2026-11-03
+
+**Rewards state is permanent.** The global player id to BAAS user id map and the rewards session clock are
+saved to Postgres (`T17_DATABASE_URL`: `t17_accounts`, `t17_session_clock`) and loaded at start, so a restart
+neither forgets who is who nor resets the three-minute timer or counts a session twice. Database down: the
+service keeps running on memory, logs `ERROR` lines, keeps unsaved writes pending and flushes them once the
+connection returns (retried every 30 seconds; the clock on the next tick). The T17 session store itself is
+still in memory: websockets do not survive a restart, so sessions end with it.
+
 ## v0.11.6 — 2026-11-03
 
 **Rewards sessions.** A player now earns a Moving Out 2 session (`game_sessions.moving-out-2`) after three

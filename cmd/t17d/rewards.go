@@ -14,11 +14,104 @@ package main
 
 import (
 	"context"
+	"log"
 	"sort"
+	"sync"
 	"time"
 
 	emit "github.com/openpak/rewards-emit"
+
+	"openpak/t17/redact"
 )
+
+// accountBacking is where the global player id -> BAAS user id map survives a restart (Postgres in production).
+type accountBacking interface {
+	upsert(ctx context.Context, gid, baas string) error
+	load(ctx context.Context) (map[string]string, error)
+}
+
+// accountStore remembers which BAAS user a global player id was minted for, in memory and, once a backing
+// store is attached, durably. Writes that cannot reach the store (not attached yet, or the database
+// is down) are kept pending, logged at error level, and written through the next time the store is
+// reachable (flush, called on every set and by the reconnect loop).
+type accountStore struct {
+	mu      sync.Mutex
+	by      map[string]string
+	pending map[string]string
+	back    accountBacking
+}
+
+// attach loads the persisted map, makes later sets write through to it, and flushes what was pending.
+func (b *accountStore) attach(ctx context.Context, back accountBacking) error {
+	m, err := back.load(ctx)
+	if err != nil {
+		return err
+	}
+	b.mu.Lock()
+	if b.by == nil {
+		b.by = map[string]string{}
+	}
+	for k, v := range m {
+		if _, mine := b.pending[k]; !mine {
+			b.by[k] = v
+		}
+	}
+	b.back = back
+	b.mu.Unlock()
+	b.flush(ctx)
+	return nil
+}
+
+func (b *accountStore) set(gid, baas string) {
+	b.mu.Lock()
+	if b.by == nil {
+		b.by = map[string]string{}
+	}
+	if b.pending == nil {
+		b.pending = map[string]string{}
+	}
+	b.by[gid] = baas
+	b.pending[gid] = baas
+	b.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	b.flush(ctx)
+}
+
+// flush writes the pending entries to the store, keeping any that fail.
+func (b *accountStore) flush(ctx context.Context) {
+	b.mu.Lock()
+	back := b.back
+	todo := make(map[string]string, len(b.pending))
+	for k, v := range b.pending {
+		todo[k] = v
+	}
+	b.mu.Unlock()
+	if len(todo) == 0 {
+		return
+	}
+	if back == nil {
+		log.Printf("[t17] ERROR account map store not connected: %d entries held in memory only until it is", len(todo))
+		return
+	}
+	for k, v := range todo {
+		if err := back.upsert(ctx, k, v); err != nil {
+			log.Printf("[t17] ERROR persisting the account map failed (%d entries pending, will retry): %v", len(todo), redact.Err(err))
+			return
+		}
+		b.mu.Lock()
+		if b.pending[k] == v {
+			delete(b.pending, k)
+		}
+		b.mu.Unlock()
+	}
+}
+
+func (b *accountStore) get(gid string) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.by[gid]
+}
 
 // rewardRooms is every open session with the connected members it holds.
 func (s *server) rewardRooms() []emit.Room {
@@ -41,9 +134,10 @@ func (s *server) rewardRooms() []emit.Room {
 	return rooms
 }
 
-func (s *server) watchSessions(ctx context.Context, rw *emit.Client, every time.Duration) {
-	if !rw.Enabled() {
-		return
-	}
-	emit.NewSessions(rw, "game_sessions.moving-out-2", 0).Watch(ctx, every, s.rewardRooms)
+const sessionMetric = "game_sessions.moving-out-2"
+
+// runSessions saves the clock after every tick and starts the watcher.
+func (s *server) runSessions(ctx context.Context, sess *emit.Sessions, every time.Duration) {
+	sess.SetOnTick(s.clock.save)
+	sess.Watch(ctx, every, s.rewardRooms)
 }

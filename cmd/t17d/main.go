@@ -50,7 +50,10 @@ func envOr(k, def string) string {
 func main() {
 	flag.Parse()
 	s := &server{self: *selfHost, keys: newKeyCache(*jwksURL, *jwksHost)}
-	s.watchSessions(context.Background(), emit.FromEnv("t17"), 20*time.Second)
+	ctx := context.Background()
+	sess := emit.NewSessions(emit.FromEnv("t17"), sessionMetric, 0)
+	s.startStore(ctx, os.Getenv("T17_DATABASE_URL"), sess)
+	s.runSessions(ctx, sess, 20*time.Second)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", s.route)
@@ -72,7 +75,8 @@ type server struct {
 	self     string
 	keys     *keyCache
 	names    names
-	accounts names // global player id -> BAAS user id (the id_token subject)
+	accounts accountStore // global player id -> BAAS user id (the id_token subject), durable
+	clock    clockSaver
 	sessions sessionStore
 	storage  storageStore
 	conns    connections

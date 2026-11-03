@@ -19,3 +19,8 @@ service.
 Set `REWARDS_EVENTS_URL` (e.g. `http://openpak-rewards:20180`) and `REWARDS_EVENTS_KEY` (or `REWARDS_EVENTS_KEY_FILE`) to report
 `game_sessions.moving-out-2` events to the rewards service; unset, the reporter is off. `REWARDS_SESSION_MIN` (default `3m`) is how long a
 player must share a room with at least one other player. A room is a T17BE session; only members with a live websocket count, and the player is the BAAS user id from get-token's id_token.
+
+`T17_DATABASE_URL` (Postgres, e.g. `postgres://t17:…@openpak-postgres:5432/t17?sslmode=disable`) keeps the id map and the
+rewards session clock across restarts (tables are created on start; pool of 2). Unset, or if the database is
+unreachable, the service logs `ERROR` and runs on memory, retrying the connection every 30 seconds and
+writing pending entries through when it returns.
