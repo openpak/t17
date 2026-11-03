@@ -8,6 +8,9 @@
 > reinstall them, or select them for current work. Use Harbor's README and
 > current handoff for builds and testing; old results do not establish Harbor parity.
 
+## v0.12.0 — 2026-11-03
+- Per-request logging: one slog line per HTTP request (method, path, status, ms) on stderr via internal/httplog. Query strings, headers and bodies are never logged; /healthz and /metrics are skipped.
+
 ## v0.11.8 — 2026-11-03
 
 **Rewards events survive a restart.** Bumps rewards-emit to v0.3.0: with `REWARDS_EMIT_DATABASE_URL` set the undelivered reward-event queue lives in Postgres (schema `emit`) instead of memory. Unset, behaviour is unchanged.

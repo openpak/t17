@@ -26,6 +26,7 @@ import (
 
 	emit "github.com/openpak/rewards-emit"
 
+	"openpak/t17/internal/httplog"
 	"openpak/t17/redact"
 )
 
@@ -68,7 +69,7 @@ func main() {
 
 	log.Printf("[t17] serving %s on %s (directory -> game.%s / xplay.%s)",
 		s.self, *addr, s.self, s.self)
-	log.Fatal((&http.Server{Addr: *addr, Handler: mux, ErrorLog: redact.ErrorLog()}).ListenAndServe())
+	log.Fatal((&http.Server{Addr: *addr, Handler: httplog.Middleware(mux), ErrorLog: redact.ErrorLog()}).ListenAndServe())
 }
 
 type server struct {
