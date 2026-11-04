@@ -4,6 +4,8 @@ import (
 	"log"
 	"sync"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"openpak/t17/redact"
 )
 
@@ -14,12 +16,13 @@ import (
 // and resolved by /sessions/accept-invite to the SAME session with both players in it. Deriving a
 // session per connection, which is what this did before, cannot carry an invite between two consoles.
 //
-// ponytail: one process, one map, no persistence. Sessions die with the server, which is right for a
-// lobby — nobody is in one across a restart. Persist only if a title turns out to need it.
+// Sessions die with the server, which is right for a lobby: nobody is in one across a restart. Pending
+// invites are player state and live in Postgres (durable.go).
 type sessionStore struct {
 	mu      sync.Mutex
 	byID    map[string]*session
-	invites map[string][]invite // keyed by invitee
+	invites map[string][]invite // keyed by invitee; only before the database is attached
+	pool    *pgxpool.Pool       // pending invites live in Postgres (t17_invites, durable.go)
 }
 
 type session struct {
@@ -100,6 +103,10 @@ func (st *sessionStore) leave(id, player string) (*session, []string) {
 }
 
 func (st *sessionStore) addInvite(in invite) {
+	if pool := st.dbPool(); pool != nil {
+		st.dbAddInvite(pool, in)
+		return
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if st.invites == nil {
@@ -114,6 +121,9 @@ func (st *sessionStore) addInvite(in invite) {
 }
 
 func (st *sessionStore) takeInvite(invitee, sessionID string) (invite, bool) {
+	if pool := st.dbPool(); pool != nil {
+		return st.dbTakeInvite(pool, invitee, sessionID)
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	list := st.invites[invitee]
@@ -129,6 +139,9 @@ func (st *sessionStore) takeInvite(invitee, sessionID string) (invite, bool) {
 }
 
 func (st *sessionStore) invitesFor(invitee string) []invite {
+	if pool := st.dbPool(); pool != nil {
+		return st.dbInvitesFor(pool, invitee)
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 

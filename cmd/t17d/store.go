@@ -34,7 +34,8 @@ CREATE TABLE IF NOT EXISTS t17_session_clock (
 	metric   text PRIMARY KEY,
 	state    text NOT NULL,
 	saved_at timestamptz NOT NULL DEFAULT now()
-)`
+);
+` + durableSchema
 
 func openStore(ctx context.Context, url string) (*pgStore, error) {
 	cfg, err := pgxpool.ParseConfig(url)
@@ -168,6 +169,14 @@ func (s *server) connect(ctx context.Context, db interface {
 				s.clock.last = raw
 				s.clock.mu.Unlock()
 			}
+		}
+	}
+	if p, ok := db.(*pgStore); ok {
+		if err := s.storage.attach(ctx, p.pool); err != nil {
+			return err
+		}
+		if err := s.sessions.attach(ctx, p.pool); err != nil {
+			return err
 		}
 	}
 	s.clock.attach(db)

@@ -8,6 +8,9 @@
 > reinstall them, or select them for current work. Use Harbor's README and
 > current handoff for builds and testing; old results do not establish Harbor parity.
 
+## v0.14.0 — 2026-11-04
+- Player storage blobs (`/storage/put|get|delete`) and pending session invites move from memory to Postgres (`t17_storage`, `t17_invites`, same `T17_DATABASE_URL`); a restart loses neither. Before the database is reachable they fall back to memory and are flushed into Postgres on connect. Sessions stay live. Account erasure deletes the account's slots and invites in Postgres. Restart test in `cmd/t17d/durable_test.go`. (openpak/prds#85)
+
 ## v0.13.0 — 2026-11-04
 - Account erasure (openpak/prds#120): `DELETE /internal/accounts/{account_id}/data` with `Authorization: Bearer $ACCOUNT_ERASE_KEY` on the health listener (`:22631`; 503 when the key is unset). Looks up the account's `switch` links in the core (`ACCOUNT_GRPC_ADDR`, default `openpak-account:20001`, `ACCOUNT_INTERNAL_KEY`) and erases the BAAS user id's `t17_accounts` row and every in-memory trace (display name, storage slots, session membership, invites, live connection). Sessions left empty are deleted. Kept: nothing per player (the session clock holds no ids). Logs `account erased account=<uuid> rows=<n> service=t17`.
 

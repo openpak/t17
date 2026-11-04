@@ -3,17 +3,20 @@ package main
 import (
 	"strings"
 	"sync"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Player storage: /storage/put remembers a value, /storage/get gives it back. The game keeps small
 // per-slot blobs here (RecentlyMetPlayers_v1 is the one it fetches at boot), base64 of its own
 // LitJSON, and it is the game's data — we never interpret it, only hold it.
 //
-// ponytail: in memory, so a restart forgets it. That is survivable for blobs the game rebuilds
-// anyway; move it to Postgres alongside sessions if a slot ever has to outlive the process.
+// The slots live in Postgres (t17_storage, durable.go) once the store is attached; the in-memory map
+// only covers the time before it is (database down at start).
 type storageStore struct {
 	mu     sync.Mutex
 	values map[string]string
+	pool   *pgxpool.Pool
 }
 
 // The slot's identity, exactly the fields T17BE_StorageSystem sends on every storage request.
@@ -35,6 +38,9 @@ func owner(in map[string]any, player string) string {
 }
 
 func (st *storageStore) get(key string) (string, bool) {
+	if pool := st.dbPool(); pool != nil {
+		return st.dbGet(pool, key)
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
@@ -43,6 +49,10 @@ func (st *storageStore) get(key string) (string, bool) {
 }
 
 func (st *storageStore) put(key, value string) {
+	if pool := st.dbPool(); pool != nil {
+		st.dbPut(pool, key, value)
+		return
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
@@ -53,6 +63,10 @@ func (st *storageStore) put(key, value string) {
 }
 
 func (st *storageStore) delete(key string) {
+	if pool := st.dbPool(); pool != nil {
+		st.dbDelete(pool, key)
+		return
+	}
 	st.mu.Lock()
 	defer st.mu.Unlock()
 

@@ -102,6 +102,13 @@ func (s *server) Erase(ctx context.Context, accountID string) (int, error) {
 		if s.names.forget(gid) {
 			rows++
 		}
+		if pool := s.storage.dbPool(); pool != nil {
+			n, err := eraseDurable(ctx, pool, gid)
+			if err != nil {
+				return rows, err
+			}
+			rows += n
+		}
 		rows += s.storage.forgetOwner(gid)
 		rows += s.sessions.forgetPlayer(gid)
 		s.conns.drop(gid)
