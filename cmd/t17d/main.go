@@ -60,6 +60,7 @@ func main() {
 	mux.HandleFunc("/", s.route)
 	go func() {
 		h := http.NewServeMux()
+		s.setupErase(h)
 		h.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 			writeJSON(w, 200, map[string]any{"status": "ok"})
 		})
@@ -81,6 +82,7 @@ type server struct {
 	sessions sessionStore
 	storage  storageStore
 	conns    connections
+	links    linkLister
 }
 
 // conn is the live websocket of a player, or nil when they are not online.

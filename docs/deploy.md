@@ -24,3 +24,11 @@ player must share a room with at least one other player. A room is a T17BE sessi
 rewards session clock across restarts (tables are created on start; pool of 2). Unset, or if the database is
 unreachable, the service logs `ERROR` and runs on memory, retrying the connection every 30 seconds and
 writing pending entries through when it returns.
+
+## Account erasure
+
+`DELETE /internal/accounts/{account_id}/data` with `Authorization: Bearer $ACCOUNT_ERASE_KEY`, served on the health listener
+(`http://openpak-t17:22631`, container network only). Unset key: 503. The account's `switch` link subjects come from the account
+core (`ACCOUNT_GRPC_ADDR`, `ACCOUNT_INTERNAL_KEY`), so call it before the core finalises the deletion. Erased: the `t17_accounts`
+row and the in-memory display name, storage slots, session membership, invites and connection of that player. Kept: nothing per
+player (the session clock stores no ids). Idempotent; answers `{"service":"t17","rows":N}`.

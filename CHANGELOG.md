@@ -8,6 +8,9 @@
 > reinstall them, or select them for current work. Use Harbor's README and
 > current handoff for builds and testing; old results do not establish Harbor parity.
 
+## v0.13.0 — 2026-11-04
+- Account erasure (openpak/prds#120): `DELETE /internal/accounts/{account_id}/data` with `Authorization: Bearer $ACCOUNT_ERASE_KEY` on the health listener (`:22631`; 503 when the key is unset). Looks up the account's `switch` links in the core (`ACCOUNT_GRPC_ADDR`, default `openpak-account:20001`, `ACCOUNT_INTERNAL_KEY`) and erases the BAAS user id's `t17_accounts` row and every in-memory trace (display name, storage slots, session membership, invites, live connection). Sessions left empty are deleted. Kept: nothing per player (the session clock holds no ids). Logs `account erased account=<uuid> rows=<n> service=t17`.
+
 ## v0.12.0 — 2026-11-03
 - Per-request logging: one slog line per HTTP request (method, path, status, ms) on stderr via internal/httplog. Query strings, headers and bodies are never logged; /healthz and /metrics are skipped.
 
